@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>פאנל מנהל הפעילות – המירוץ למיליון</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .admin-body {
+      background-color: #0b0f19;
+      color: #f3f4f6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 16px;
+      margin: 0;
+    }
+    .admin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .team-admin-card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-col: column;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+    .team-admin-card.active-team {
+      border-color: #f59e0b;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+    }
+    .badge-status {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      color: white;
+      transition: all 0.15s;
+    }
+    .btn-small:hover {
+      filter: brightness(1.15);
+      transform: translateY(-1px);
+    }
+    .cheat-sheet-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 0.9rem;
+    }
+    .cheat-sheet-table th, .cheat-sheet-table td {
+      border: 1px solid #374151;
+      padding: 10px 12px;
+      text-align: right;
+    }
+    .cheat-sheet-table th {
+      background: #1f2937;
+      color: #fbbf24;
+    }
+    .cheat-code-badge {
+      background: #064e3b;
+      color: #34d399;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .station-editor-card {
+      background: #131d31;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      transition: border 0.2s;
+    }
+    .station-editor-card:hover {
+      border-color: #38bdf8;
+    }
+    .form-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .form-input, .form-textarea {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: white;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
+    .form-input:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #f59e0b;
+    }
+    .tab-btn {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: #f59e0b;
+      color: #0f172a;
+    }
+
+    /* התאמות מיוחדות למנהל בסמארטפונים */
+    @media (max-width: 640px) {
+      .admin-body {
+        padding: 10px;
+      }
+      .admin-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .tab-btn {
+        flex: 1 1 100%;
+        text-align: center;
+        padding: 10px 12px;
+        font-size: 0.88rem;
+      }
+      .form-input, .form-textarea {
+        font-size: 16px !important;
+      }
+      .station-editor-card {
+        padding: 12px;
+      }
+      .cheat-sheet-table {
+        min-width: 580px;
+      }
+    }
+  </style>
+</head>
+<body class="admin-body">
+
+  <!-- מסך התחברות מנהל -->
+  <div id="loginSection" style="max-width: 400px; margin: 80px auto; background: #111827; border: 2px solid #f59e0b; border-radius: var(--radius-lg); padding: 30px; text-align: center;">
+    <div style="font-size: 3.5rem; margin-bottom: 10px;">🔐</div>
+    <h2 style="color: #fbbf24; margin-bottom: 8px;">כניסת מנהל הפעילות</h2>
+    <p style="color: #9ca3af; font-size: 0.95rem; margin-bottom: 18px;">הזינו את קוד המנהל הסודי לכניסה:</p>
+    <input type="password" id="adminCodeInput" class="input-styled" placeholder="קוד מנהל..." style="text-align: center; font-size: 1.3rem;">
+    <button id="btnAdminLogin" class="btn-primary" style="margin-top: 14px;">כניסה למערכת הבקרה 🚀</button>
+  </div>
+
+  <!-- לוח בקרה מלא למנהל -->
+  <div id="dashboardSection" style="display: none; max-width: 1200px; margin: 0 auto;">
+    
+    <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #374151; padding-bottom: 16px; margin-bottom: 20px;">
+      <div>
+        <h1 style="color: #fbbf24; font-size: 1.8rem; font-weight: 900; margin: 0 0 4px 0;">👑 לוח בקרת מנהל – המירוץ למיליון</h1>
+        <p style="color: #9ca3af; font-size: 0.95rem; margin: 0;">שליטה בזמן אמת, עריכת תוכן התחנות, ניהול רמזים ומעקב קבוצות</p>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <a href="/" target="_blank" class="btn-small" style="background: #2563eb; padding: 8px 14px; text-decoration: none; font-weight:700;">פתח מסך שחקן 🏃‍♂️</a>
+        <button id="btnRefresh" class="btn-small" style="padding: 8px 14px; background: #4b5563;">רענן נתונים 🔄</button>
+      </div>
+    </header>
+
+    <!-- טאבים ראשיים -->
+    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+      <button class="tab-btn active" id="tabBtnTeams">📊 מצב הקבוצות בלייב</button>
+      <button class="tab-btn" id="tabBtnEditor">✏️ עריכת תחנות, מיקומים, שאלות ורמזים</button>
+      <button class="tab-btn" id="tabBtnCheat">📋 מאגר תשובות וצפנים (Cheat Sheet)</button>
+    </div>
+
+    <!-- אזור טאב 1: מצב הקבוצות בלייב -->
+    <div id="tabContentTeams">
+      <div style="background: #111827; border: 1px solid #1f2937; border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-weight: 700;">מצב פעילות:</span>
+          <button id="btnToggleStrictMode" class="btn-small" style="background: #059669; padding: 6px 14px; font-weight: 700;">
+            מצב תחרות מלא (חובה 5 שחקנים או חצי מהקבוצה)
+          </button>
+        </div>
+        <div style="color: #94a3b8; font-size: 0.9rem;">
+          קישור למכשירים ניידים: <strong style="color: #38bdf8;">http://172.20.10.2:3000</strong>
+        </div>
+      </div>
+
+      <!-- מדד רמזים מרוכז לכל 8 הקבוצות -->
+      <div style="background: #111827; border: 1px solid #374151; border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <h3 style="color: #fbbf24; font-size: 1.15rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px;">
+            <span>💡</span>
+            <span>מדד רמזים שנלקחו לכל קבוצה (חי בזמן אמת)</span>
+          </h3>
+          <span style="font-size: 0.85rem; color: #94a3b8;">נחשף לקבוצה כאשר 3 שחקנים הצביעו לפתיחה</span>
+        </div>
+        <div id="hintsSummaryRow" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 10px;">
+          <!-- יוכנס דינמית על ידי renderTeams -->
+        </div>
+      </div>
+
+      <div class="admin-grid" id="teamsAdminGrid"></div>
+    </div>
+
+    <!-- אזור טאב 2: עריכת תחנות, מיקומים, שאלות ורמזים -->
+    <div id="tabContentEditor" style="display: none;">
+      <div style="background: #111827; border: 1px solid #1f2937; border-radius: 14px; padding: 20px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <h2 style="color: #fbbf24; font-size: 1.4rem; font-weight: 900; margin: 0 0 4px 0;">✏️ עריכת והוספת תחנות בזמן אמת</h2>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin: 0;">
+              עדכנו שמות, מספרים, מיקומים, שאלות, תשובות נכונות ורמזים, או הוסיפו תחנה חדשה למסלול.
+            </p>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button id="btnOpenAddStationPanel" class="btn-small" style="background: #0284c7; padding: 10px 18px; font-size: 0.95rem; font-weight: bold;">
+              ➕ הוסף תחנה חדשה
+            </button>
+            <button id="btnSaveAllStations" class="btn-small" style="background: #10b981; padding: 10px 18px; font-size: 0.95rem; font-weight: bold;">
+              💾 שמור את כל התחנות
+            </button>
+          </div>
+        </div>
+
+        <!-- פאנל טופס יצירת תחנה חדשה -->
+        <div id="addStationPanel" style="display: none; background: #0f172a; border: 2px dashed #38bdf8; border-radius: 14px; padding: 20px; margin-bottom: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <h3 style="color: #38bdf8; font-size: 1.25rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px;">
+              <span>➕</span>
+              <span>יצירת תחנה חדשה למירוץ</span>
+            </h3>
+            <button type="button" id="btnCloseAddStationPanel" style="background: none; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer; padding: 0 6px;">✕</button>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
+            <div style="grid-column: 1 / -1; display: grid; grid-template-columns: minmax(100px, 130px) 1fr; gap: 12px; background: rgba(30, 41, 59, 0.6); padding: 12px 14px; border-radius: 10px; border: 1px solid #3b82f6;">
+              <div>
+                <label class="form-label" style="color: #fbbf24; font-weight: 800;">🔢 מספר התחנה:</label>
+                <input type="number" id="newStationNumber" class="form-input" min="1" max="99" style="text-align: center; font-weight: 900; color: #fbbf24; font-size: 1.15rem;">
+              </div>
+              <div>
+                <label class="form-label" style="color: #38bdf8; font-weight: 800;">🏷️ שם התחנה (המוצג לשחקנים):</label>
+                <input type="text" id="newStationName" class="form-input" placeholder="לדוגמה: משימת שטח – כתב הסתרים">
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label">📍 1. מיקום התחנה בשטח:</label>
+              <input type="text" id="newStationLocation" class="form-input" placeholder="לדוגמה: ליד מגדל המים...">
+
+              <label class="form-label">🔑 2. תשובה נכונה / קוד סודי לפתיחה:</label>
+              <input type="text" id="newStationAnswer" class="form-input" placeholder="קוד סודי שהשחקנים צריכים להזין...">
+            </div>
+
+            <div>
+              <label class="form-label">❓ 3. שאלת התחנה / הוראות לשחקנים:</label>
+              <textarea id="newStationQuestion" class="form-textarea" rows="2" placeholder="טקסט החידה או ההוראה..."></textarea>
+
+              <label class="form-label">💡 4. רמז (נחשף לאחר 3 הצבעות קבוצתיות):</label>
+              <textarea id="newStationHint" class="form-textarea" rows="2" placeholder="טקסט הרמז..."></textarea>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" id="btnCancelAddStation" class="btn-small" style="background: #475569;">ביטול</button>
+            <button type="button" id="btnConfirmAddStation" class="btn-small" style="background: #0284c7; font-weight: bold; padding: 8px 22px;">צור והוסף תחנה למסלול ✨</button>
+          </div>
+        </div>
+
+        <div id="stationEditorsContainer"></div>
+      </div>
+    </div>
+
+    <!-- אזור טאב 3: מאגר צפנים חי ועריכ (Cheat Sheet) -->
+    <div id="tabContentCheat" style="display: none;">
+      <div style="background: #111827; border: 1px solid #1f2937; border-radius: var(--radius-lg); padding: 22px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2 style="color: #fbbf24; font-size: 1.4rem; font-weight: 900; margin: 0 0 4px 0;">📋 מאגר כל התשובות והצפנים (מתעדכן בלייב ועריכ)</h2>
+            <p style="color: #9ca3af; font-size: 0.9rem; margin: 0;">
+              מאגר זה מתעדכן בזמן אמת לפי כל התחנות. ניתן לערוך ישירות בטבלה את השם, המיקום והקוד הסודי, ולשמור בלחיצת כפתור!
+            </p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="cheatSearchInput" placeholder="🔍 חיפוש תחנה, קוד או מיקום..." class="form-input" style="max-width: 240px; padding: 7px 12px; font-size: 0.85rem;">
+            <button id="btnSaveAllCheatRows" class="btn-small" style="background: #10b981; padding: 8px 16px; font-weight: bold;">
+              💾 שמור את כל השינויים במאגר
+            </button>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="cheat-sheet-table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th style="width: 65px; text-align: center;">מס'</th>
+                <th style="min-width: 160px;">שם התחנה</th>
+                <th style="min-width: 140px;">מיקום בשטח</th>
+                <th style="min-width: 140px;">קוד / תשובה נכונה</th>
+                <th style="min-width: 180px;">רמז / הערות למנחה</th>
+                <th style="width: 95px; text-align: center;">פעולות</th>
+              </tr>
+            </thead>
+            <tbody id="cheatSheetTableBody">
+              <!-- ירונדר דינמית על ידי renderCheatSheet -->
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top: 24px; background: #0f172a; padding: 16px; border-radius: 12px; border: 1px solid #334155;">
+          <h4 style="color: #fbbf24; margin-top: 0; margin-bottom: 8px;">🍰 7 המצרכים הנפתחים לאורך המירוץ:</h4>
+          <p style="color: #cbd5e1; font-size: 0.95rem; margin: 0; line-height: 1.6;">
+            1. 🍪 <strong>פתיבר</strong> (נפתח אחרי 2 תחנות)<br>
+            2. 🧈 <strong>חמאה</strong> (נפתח אחרי 4 תחנות)<br>
+            3. 🍫 <strong>שוקולד</strong> (נפתח אחרי 7 תחנות)<br>
+            4. ☕ <strong>קקאו</strong> (נפתח אחרי 9 תחנות)<br>
+            5. 🥛 <strong>חלב</strong> (נפתח אחרי 11 תחנות)<br>
+            6. 🍬 <strong>סוכריות</strong> (נפתח אחרי 13 תחנות)<br>
+            7. 🥥 <strong>קוקוס</strong> (נפתח אחרי 15 תחנות)<br>
+            $\rightarrow$ <strong>בתחנה 17: מכינים כדורי שוקולד!</strong>
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const loginSection = document.getElementById('loginSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const adminCodeInput = document.getElementById('adminCodeInput');
+    const btnAdminLogin = document.getElementById('btnAdminLogin');
+    const teamsAdminGrid = document.getElementById('teamsAdminGrid');
+    const btnToggleStrictMode = document.getElementById('btnToggleStrictMode');
+    const stationEditorsContainer = document.getElementById('stationEditorsContainer');
+
+    // טאבים
+    const tabBtnTeams = document.getElementById('tabBtnTeams');
+    const tabBtnEditor = document.getElementById('tabBtnEditor');
+    const tabBtnCheat = document.getElementById('tabBtnCheat');
+    const tabContentTeams = document.getElementById('tabContentTeams');
+    const tabContentEditor = document.getElementById('tabContentEditor');
+    const tabContentCheat = document.getElementById('tabContentCheat');
+
+    let currentSystemConfig = { strictMode: true, minRequiredAnswers: 5 };
+    let cachedStations = [];
+    let currentAdminCode = '';
+
+    function switchTab(activeTab) {
+      tabBtnTeams.classList.remove('active');
+      tabBtnEditor.classList.remove('active');
+      tabBtnCheat.classList.remove('active');
+      tabContentTeams.style.display = 'none';
+      tabContentEditor.style.display = 'none';
+      tabContentCheat.style.display = 'none';
+
+      if (activeTab === 'teams') {
+        tabBtnTeams.classList.add('active');
+        tabContentTeams.style.display = 'block';
+      } else if (activeTab === 'editor') {
+        tabBtnEditor.classList.add('active');
+        tabContentEditor.style.display = 'block';
+      } else if (activeTab === 'cheat') {
+        tabBtnCheat.classList.add('active');
+        tabContentCheat.style.display = 'block';
+        renderCheatSheet(cachedStations);
+      }
+    }
+
+    tabBtnTeams.addEventListener('click', () => switchTab('teams'));
+    tabBtnEditor.addEventListener('click', () => switchTab('editor'));
+    tabBtnCheat.addEventListener('click', () => switchTab('cheat'));
+
+    btnAdminLogin.addEventListener('click', () => {
+      const code = adminCodeInput.value.trim();
+      currentAdminCode = code;
+      socket.emit('admin_login', { code });
+    });
+
+    socket.on('admin_auth_success', ({ teams, stations, ingredients, systemConfig }) => {
+      loginSection.style.display = 'none';
+      dashboardSection.style.display = 'block';
+      cachedStations = stations || [];
+      if (systemConfig) {
+        currentSystemConfig = systemConfig;
+        updateConfigBtn();
+      }
+      renderTeams(teams);
+      renderStationEditors(cachedStations);
+      renderCheatSheet(cachedStations);
+    });
+
+    socket.on('admin_auth_failed', ({ message }) => {
+      alert(message);
+    });
+
+    socket.on('admin_state_update', ({ teams, stations, systemConfig }) => {
+      if (systemConfig) {
+        currentSystemConfig = systemConfig;
+        updateConfigBtn();
+      }
+      if (stations) {
+        cachedStations = stations;
+        renderStationEditors(cachedStations);
+        renderCheatSheet(cachedStations);
+      }
+      renderTeams(teams);
+    });
+
+    function updateConfigBtn() {
+      if (currentSystemConfig.strictMode) {
+        btnToggleStrictMode.textContent = 'מצב תחרות מלא (חובה 5 שחקנים או חצי מהקבוצה)';
+        btnToggleStrictMode.style.background = '#059669';
+      } else {
+        btnToggleStrictMode.textContent = 'מצב בדיקה מהיר (מספיק שחקן 1 למעבר)';
+        btnToggleStrictMode.style.background = '#d97706';
+      }
+    }
+
+    btnToggleStrictMode.addEventListener('click', () => {
+      const newMode = !currentSystemConfig.strictMode;
+      socket.emit('admin_set_config', { strictMode: newMode });
+    });
+
+    // כרטיסי קבוצות בלייב ומדד רמזים
+    function renderTeams(teams) {
+      teamsAdminGrid.innerHTML = '';
+      const hintsSummaryRow = document.getElementById('hintsSummaryRow');
+      if (hintsSummaryRow) hintsSummaryRow.innerHTML = '';
+
+      Object.values(teams).forEach(team => {
+        const curStationIdx = team.stationOrder[team.currentStepIndex];
+        const station = cachedStations.find(s => s.id === (curStationIdx + 1)) || { id: curStationIdx + 1, name: `תחנה ${curStationIdx + 1}` };
+        const answersForSt = team.stationAnswers[station.id] || {};
+        const answeredCount = Object.keys(answersForSt).length;
+        const totalRemaining = team.stationOrder.length - team.completedStations.length;
+        const isActive = team.members.length > 0;
+        const hintsUnlocked = team.unlockedHints ? Object.keys(team.unlockedHints) : [];
+        const hintsCount = hintsUnlocked.length;
+
+        // הוספה לשורת המדד המרוכז
+        if (hintsSummaryRow) {
+          const pill = document.createElement('div');
+          pill.style.cssText = `background: ${hintsCount > 0 ? 'rgba(245, 158, 11, 0.15)' : '#1f2937'}; border: 1px solid ${hintsCount > 0 ? '#f59e0b' : '#374151'}; border-radius: 10px; padding: 10px 8px; text-align: center; transition: all 0.2s;`;
+          pill.innerHTML = `
+            <div style="font-weight: 700; color: #f3f4f6; font-size: 0.85rem;">${team.name}</div>
+            <div style="font-size: 1.4rem; font-weight: 900; color: ${hintsCount > 0 ? '#fbbf24' : '#6b7280'}; margin: 3px 0;">${hintsCount}</div>
+            <div style="font-size: 0.72rem; color: #9ca3af;">רמזים שנלקחו</div>
+          `;
+          hintsSummaryRow.appendChild(pill);
+        }
+
+        const card = document.createElement('div');
+        card.className = `team-admin-card ${isActive ? 'active-team' : ''}`;
+        card.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="font-size: 1.25rem; font-weight: 800; color: #fbbf24; margin: 0;">${team.name}</h3>
+            <span class="badge-status" style="background: ${isActive ? '#064e3b' : '#374151'}; color: ${isActive ? '#34d399' : '#9ca3af'};">
+              ${team.members.length} מחוברים
+            </span>
+          </div>
+
+          <div style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin-top: 6px;">
+            <div>תחנה נוכחית: <strong style="color: #38bdf8;">תחנה ${station.id} - ${station.name}</strong></div>
+            <div>שלב במסלול: <strong>שלב ${team.currentStepIndex + 1} מתוך ${team.stationOrder.length}</strong></div>
+            <div>תחנות שנותרו: <strong style="color: #f59e0b;">${totalRemaining}</strong></div>
+            <div>תשובות שנרשמו בתחנה: <strong style="color: #34d399;">${answeredCount}</strong></div>
+            <div>מצרכים שנפתחו: <strong style="color: #fbbf24;">${team.unlockedIngredients.length} מתוך 7</strong></div>
+            
+            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 7px 10px; margin: 8px 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; color: #fef08a;">💡 רמזים שנלקחו:</span>
+                <strong style="color: ${hintsCount > 0 ? '#fbbf24' : '#9ca3af'}; font-size: 1.15rem; font-weight: 900;">${hintsCount} רמזים</strong>
+              </div>
+              ${hintsCount > 0 ? `<div style="font-size: 0.72rem; color: #fde047; margin-top: 3px;">בתחנות מס': ${hintsUnlocked.join(', ')}</div>` : '<div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">לא נלקחו רמזים עדיין</div>'}
+            </div>
+
+            ${team.isGameCompleted ? '<div style="color: #4ade80; font-weight: 900; margin-top: 4px;">🏆 סיימו את המירוץ בהצלחה!</div>' : ''}
+            ${team.sabotagedUntil && team.sabotagedUntil > Date.now() ? `<div style="color: #ef4444; font-weight: 900; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; border-radius: 6px; padding: 4px 8px; margin-top: 6px;">🛑 מוקפאים כעת בריקרול ע"י ${team.sabotageByTeam || 'סבוטאז'}!</div>` : ''}
+            ${team.sabotageTriggered ? `<div style="color: #f97316; font-size: 0.82rem; font-weight: 700; margin-top: 4px;">⚡ שיגרו חסימה לקבוצה ${team.sabotageTarget}!</div>` : ''}
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+            <button class="btn-small btn-advance" data-team="${team.id}" style="background: #2563eb;">קדם תחנה ⏩</button>
+            <button class="btn-small btn-rickroll" data-team="${team.id}" style="background: #dc2626;">שגר ריקרול 🕺</button>
+            <button class="btn-small btn-reset" data-team="${team.id}" style="background: #4b5563;">איפוס 🔄</button>
+          </div>
+        `;
+
+        card.querySelector('.btn-advance').addEventListener('click', () => {
+          if (confirm(`לקדם את ${team.name} לתחנה הבאה?`)) {
+            socket.emit('admin_force_advance', { teamId: team.id });
+          }
+        });
+
+        card.querySelector('.btn-rickroll').addEventListener('click', () => {
+          socket.emit('admin_trigger_rickroll', { teamId: team.id });
+          alert(`ריקרול שוגר ל-${team.name}!`);
+        });
+
+        card.querySelector('.btn-reset').addEventListener('click', () => {
+          if (confirm(`לאפס את נתוני ${team.name}?`)) {
+            socket.emit('admin_reset_team', { teamId: team.id });
+          }
+        });
+
+        teamsAdminGrid.appendChild(card);
+      });
+    }
+
+    // עריכת 17 התחנות (מיקום, שאלה, תשובה נכונה, רמז)
+    function renderStationEditors(stations) {
+      stationEditorsContainer.innerHTML = '';
+
+      stations.forEach(st => {
+        const card = document.createElement('div');
+        card.className = 'station-editor-card';
+        card.id = `stationCard_${st.id}`;
+        card.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: #f59e0b; color: #0f172a; font-weight: 900; padding: 2px 8px; border-radius: 6px; font-size: 0.85rem;">תחנה #${st.id}</span>
+              <strong style="color: #f8fafc; font-size: 1.1rem;">${st.name}</strong>
+              <span style="color: #64748b; font-size: 0.8rem;">(${st.badge || ''})</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-small btn-save-station" data-id="${st.id}" style="background: #10b981; font-weight: bold;">שמור שינויים 💾</button>
+              ${st.type !== 'admin_custom_final' ? `<button class="btn-small btn-delete-station" data-id="${st.id}" style="background: #dc2626; font-weight: bold;">מחק 🗑️</button>` : ''}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
+            <div style="grid-column: 1 / -1; display: grid; grid-template-columns: minmax(100px, 130px) 1fr; gap: 12px; background: rgba(30, 41, 59, 0.6); padding: 12px 14px; border-radius: 10px; border: 1px solid #3b82f6;">
+              <div>
+                <label class="form-label" style="color: #fbbf24; font-weight: 800;">🔢 מספר התחנה:</label>
+                <input type="number" class="form-input st-new-id" value="${st.id}" min="1" max="99" style="text-align: center; font-weight: 900; color: #fbbf24; font-size: 1.15rem;">
+              </div>
+              <div>
+                <label class="form-label" style="color: #38bdf8; font-weight: 800;">🏷️ שם התחנה (כותרת המוצגת לשחקנים):</label>
+                <input type="text" class="form-input st-name" value="${st.name || ''}" placeholder="הזינו את שם התחנה...">
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label">📍 1. מיקום התחנה בשטח:</label>
+              <input type="text" class="form-input st-location" value="${st.location || ''}" placeholder="לדוגמה: ליד הספסלים בחורשת האורנים...">
+
+              <label class="form-label">🔑 2. התשובה הנכונה / הקוד שעל השחקנים להזין:</label>
+              <input type="text" class="form-input st-answer" value="${st.answer || ''}" placeholder="קוד סודי לפתיחה...">
+            </div>
+
+            <div>
+              <label class="form-label">❓ 3. השאלה / ההוראה המוצגת לשחקנים:</label>
+              <textarea class="form-textarea st-question" rows="2" placeholder="טקסט השאלה או ההוראות...">${st.question || ''}</textarea>
+
+              <label class="form-label">💡 4. רמז (נחשף רק כאשר לפחות 3 שחקנים מצביעים עבורו):</label>
+              <textarea class="form-textarea st-hint" rows="2" placeholder="טקסט הרמז שיוצג לאחר 3 הצבעות...">${st.hint || ''}</textarea>
+            </div>
+          </div>
+          <div class="save-msg" style="color: #34d399; font-size: 0.8rem; font-weight: bold; margin-top: 4px; display: none;">✓ השינויים נשמרו בהצלחה וסונכרנו לשחקנים!</div>
+        `;
+
+        card.querySelector('.btn-save-station').addEventListener('click', () => {
+          saveSingleStation(st.id);
+        });
+
+        const btnDel = card.querySelector('.btn-delete-station');
+        if (btnDel) {
+          btnDel.addEventListener('click', () => {
+            deleteSingleStation(st.id, st.name);
+          });
+        }
+
+        stationEditorsContainer.appendChild(card);
+      });
+    }
+
+    function saveSingleStation(stationId) {
+      const card = document.getElementById(`stationCard_${stationId}`);
+      if (!card) return;
+
+      const newId = card.querySelector('.st-new-id') ? card.querySelector('.st-new-id').value.trim() : stationId;
+      const name = card.querySelector('.st-name') ? card.querySelector('.st-name').value.trim() : '';
+      const location = card.querySelector('.st-location').value.trim();
+      const question = card.querySelector('.st-question').value.trim();
+      const answer = card.querySelector('.st-answer').value.trim();
+      const hint = card.querySelector('.st-hint').value.trim();
+
+      fetch('/api/admin/update-station', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: currentAdminCode,
+          stationId,
+          newId,
+          name,
+          location,
+          question,
+          answer,
+          hint
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const msg = card.querySelector('.save-msg');
+          msg.style.display = 'block';
+          setTimeout(() => msg.style.display = 'none', 3000);
+        } else {
+          alert('שגיאה בשמירת התחנה: ' + (data.error || 'נא לבדוק קוד מנהל'));
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert('שגיאת תקשורת בשמירה');
+      });
+    }
+
+    function deleteSingleStation(stationId, stationName) {
+      if (!confirm(`האם את בטוחה שברצונך למחוק את תחנה ${stationId} ("${stationName}") מהמירוץ?`)) {
+        return;
+      }
+      fetch('/api/admin/delete-station', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: currentAdminCode,
+          stationId
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('התחנה נמחקה בהצלחה!');
+        } else {
+          alert('שגיאה במחיקת התחנה: ' + (data.error || ''));
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert('שגיאת תקשורת במחיקת תחנה');
+      });
+    }
+
+    // הוספת תחנה חדשה
+    const btnOpenAddStationPanel = document.getElementById('btnOpenAddStationPanel');
+    const addStationPanel = document.getElementById('addStationPanel');
+    const btnCloseAddStationPanel = document.getElementById('btnCloseAddStationPanel');
+    const btnCancelAddStation = document.getElementById('btnCancelAddStation');
+    const btnConfirmAddStation = document.getElementById('btnConfirmAddStation');
+
+    const newStationNumber = document.getElementById('newStationNumber');
+    const newStationName = document.getElementById('newStationName');
+    const newStationLocation = document.getElementById('newStationLocation');
+    const newStationAnswer = document.getElementById('newStationAnswer');
+    const newStationQuestion = document.getElementById('newStationQuestion');
+    const newStationHint = document.getElementById('newStationHint');
+
+    if (btnOpenAddStationPanel) {
+      btnOpenAddStationPanel.addEventListener('click', () => {
+        const normal = cachedStations.filter(s => s.type !== 'admin_custom_final');
+        newStationNumber.value = normal.length + 1;
+        newStationName.value = `תחנה ${normal.length + 1}`;
+        newStationLocation.value = '';
+        newStationAnswer.value = '';
+        newStationQuestion.value = '';
+        newStationHint.value = '';
+        addStationPanel.style.display = 'block';
+        addStationPanel.scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+
+    function closeAddStationPanel() {
+      if (addStationPanel) addStationPanel.style.display = 'none';
+    }
+
+    if (btnCloseAddStationPanel) btnCloseAddStationPanel.addEventListener('click', closeAddStationPanel);
+    if (btnCancelAddStation) btnCancelAddStation.addEventListener('click', closeAddStationPanel);
+
+    if (btnConfirmAddStation) {
+      btnConfirmAddStation.addEventListener('click', () => {
+        const id = newStationNumber.value.trim();
+        const name = newStationName.value.trim();
+        const location = newStationLocation.value.trim();
+        const answer = newStationAnswer.value.trim();
+        const question = newStationQuestion.value.trim();
+        const hint = newStationHint.value.trim();
+
+        if (!name) {
+          alert('נא להזין שם לתחנה החדשה!');
+          return;
+        }
+
+        fetch('/api/admin/add-station', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: currentAdminCode,
+            id,
+            name,
+            location,
+            question,
+            answer,
+            hint
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            closeAddStationPanel();
+            alert(`תחנה חדשה ("${name}") נוספה בהצלחה למסלול!`);
+          } else {
+            alert('שגיאה בהוספת התחנה: ' + (data.error || ''));
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert('שגיאת תקשורת בהוספת תחנה');
+        });
+      });
+    }
+
+    document.getElementById('btnSaveAllStations').addEventListener('click', () => {
+      cachedStations.forEach(st => {
+        saveSingleStation(st.id);
+      });
+      alert('כל התחנות נשמרו וסונכרנו!');
+    });
+
+    // --- מאגר צפנים חי ועריכ (Cheat Sheet) ---
+    function renderCheatSheet(stations) {
+      const tbody = document.getElementById('cheatSheetTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const searchInput = document.getElementById('cheatSearchInput');
+      const filter = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+      stations.forEach(st => {
+        const textToMatch = `${st.id} ${st.name} ${st.location || ''} ${st.answer || ''} ${st.hint || ''}`.toLowerCase();
+        if (filter && !textToMatch.includes(filter)) return;
+
+        const tr = document.createElement('tr');
+        tr.id = `cheatRow_${st.id}`;
+        tr.style.borderBottom = '1px solid #1f2937';
+        tr.innerHTML = `
+          <td style="text-align: center; vertical-align: middle;">
+            <span class="cheat-code-badge" style="background: #2563eb; color: white; font-weight: 900; font-size: 0.95rem; padding: 3px 8px; border-radius: 6px;">${st.id}</span>
+          </td>
+          <td style="vertical-align: middle;">
+            <input type="text" class="form-input cheat-st-name" value="${st.name || ''}" style="font-weight: bold; width: 100%; font-size: 0.9rem;">
+          </td>
+          <td style="vertical-align: middle;">
+            <input type="text" class="form-input cheat-st-loc" value="${st.location || ''}" placeholder="מיקום בשטח..." style="width: 100%; font-size: 0.85rem;">
+          </td>
+          <td style="vertical-align: middle;">
+            <input type="text" class="form-input cheat-st-ans" value="${st.answer || ''}" placeholder="קוד סודי..." style="color: #4ade80; font-family: monospace; font-weight: 900; font-size: 1.05rem; width: 100%; background: #0f172a; border-color: #059669;">
+          </td>
+          <td style="vertical-align: middle;">
+            <input type="text" class="form-input cheat-st-hint" value="${st.hint || ''}" placeholder="רמז / הערות למנחה..." style="width: 100%; font-size: 0.85rem;">
+          </td>
+          <td style="text-align: center; vertical-align: middle;">
+            <button class="btn-small btn-save-cheat-row" data-id="${st.id}" style="background: #10b981; font-weight: bold; padding: 7px 12px; width: 100%; font-size: 0.85rem;">
+              שמור 💾
+            </button>
+          </td>
+        `;
+
+        tr.querySelector('.btn-save-cheat-row').addEventListener('click', () => {
+          saveCheatRow(st.id);
+        });
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function saveCheatRow(stationId) {
+      const tr = document.getElementById(`cheatRow_${stationId}`);
+      if (!tr) return;
+
+      const name = tr.querySelector('.cheat-st-name').value.trim();
+      const location = tr.querySelector('.cheat-st-loc').value.trim();
+      const answer = tr.querySelector('.cheat-st-ans').value.trim();
+      const hint = tr.querySelector('.cheat-st-hint').value.trim();
+
+      const original = cachedStations.find(s => s.id === stationId);
+      const question = original ? original.question : '';
+
+      fetch('/api/admin/update-station', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: currentAdminCode,
+          stationId,
+          name,
+          location,
+          answer,
+          hint,
+          question
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const btn = tr.querySelector('.btn-save-cheat-row');
+          const origText = btn.textContent;
+          btn.textContent = '✓ נשמר!';
+          btn.style.background = '#059669';
+          setTimeout(() => {
+            btn.textContent = origText;
+            btn.style.background = '#10b981';
+          }, 2000);
+        } else {
+          alert('שגיאה בשמירת התחנה במאגר: ' + (data.error || ''));
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert('שגיאת תקשורת בשמירת מאגר הצפנים');
+      });
+    }
+
+    const btnSaveAllCheatRows = document.getElementById('btnSaveAllCheatRows');
+    if (btnSaveAllCheatRows) {
+      btnSaveAllCheatRows.addEventListener('click', () => {
+        cachedStations.forEach(st => {
+          saveCheatRow(st.id);
+        });
+        alert('כל השינויים במאגר הצפנים נשמרו בהצלחה וסונכרנו לכל השחקנים!');
+      });
+    }
+
+    const cheatSearchInput = document.getElementById('cheatSearchInput');
+    if (cheatSearchInput) {
+      cheatSearchInput.addEventListener('input', () => {
+        renderCheatSheet(cachedStations);
+      });
+    }
+
+    document.getElementById('btnRefresh').addEventListener('click', () => {
+      if (currentAdminCode) socket.emit('admin_login', { code: currentAdminCode });
+    });
+  </script>
+</body>
+</html>

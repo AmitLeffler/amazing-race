@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>המירוץ למיליון - המשחק הגדול</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
+</head>
+<body class="min-h-screen bg-slate-900 text-white font-sans overflow-x-hidden" dir="rtl">
+
+  <!-- סרגל עליון מותאם לטלפונים -->
+  <header class="bg-slate-800 border-b border-slate-700 px-3 py-2.5 sm:p-4 sticky top-0 z-20 shadow-md">
+    <div class="max-w-4xl mx-auto flex justify-between items-center gap-2">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <span class="text-xl sm:text-2xl">🏃‍♂️💨</span>
+        <div>
+          <h1 class="text-base sm:text-xl font-black text-yellow-400 leading-tight" id="teamBadge">טוען קבוצה...</h1>
+          <p class="text-[11px] sm:text-xs text-slate-400" id="membersCount">0 מחוברים</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div class="text-left bg-slate-900/70 px-2.5 py-1 rounded-xl border border-slate-700/70">
+          <p class="text-[10px] sm:text-xs text-amber-300 font-bold">💡 רמזים שנלקחו</p>
+          <p class="text-base sm:text-xl font-black text-yellow-400 leading-none text-center" id="hintsUsedCount">0</p>
+        </div>
+        <div class="text-left">
+          <p class="text-[10px] sm:text-xs text-slate-400">תחנות שנותרו</p>
+          <p class="text-lg sm:text-2xl font-bold text-yellow-400 leading-none" id="stationsRemaining">17 <span class="text-slate-500 text-xs">/ 17</span></p>
+        </div>
+        <a href="/admin.html" class="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-600 font-bold whitespace-nowrap">מנהל</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- אזור תוכן ראשי -->
+  <main class="max-w-4xl mx-auto p-4 py-6">
+    
+    <!-- סרגל מצרכים עליון (7 מצרכים לכדורי שוקולד) -->
+    <div class="bg-slate-800 p-4 rounded-2xl mb-6 border border-slate-700 shadow-lg">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">מצרכים שנאספו לכדורי השוקולד</h3>
+        <span class="text-xs text-yellow-400 font-bold" id="ingredientsRatioText">0 / 7 מצרכים</span>
+      </div>
+      <div class="flex justify-between gap-2 overflow-x-auto pb-1" id="ingredientsSlots">
+        <!-- 7 משבצות מצרכים מוזרקות דינמית -->
+      </div>
+    </div>
+
+    <!-- כרטיס סטטוס תחנה -->
+    <div class="bg-slate-800 p-5 rounded-2xl shadow-xl border border-slate-700 mb-6">
+      <div class="flex justify-between items-center mb-2">
+        <span class="bg-cyan-900/60 text-cyan-300 text-xs font-bold px-3 py-1 rounded-full border border-cyan-500" id="stationBadge">תחנה</span>
+        <div class="text-xs text-slate-400 font-bold">
+          ענו נכון: <span class="text-green-400 text-sm font-black" id="liveAnsweredText">0 / 5</span>
+        </div>
+      </div>
+      <h2 class="text-2xl font-black text-white" id="stationTitle">טוען את התחנה...</h2>
+
+      <!-- נקודות התקדמות חברי הקבוצה -->
+      <div class="flex gap-1.5 mt-3" id="liveProgressDots"></div>
+    </div>
+
+    <!-- תוכן אינטראקטיבי של התחנה -->
+    <div id="stationContent">
+      <div class="text-center p-12 text-slate-400">
+        טוען את נתוני התחנה...
+      </div>
+    </div>
+
+  </main>
+
+  <!-- מודאל כניסה לקבוצה -->
+  <div class="modal-overlay" id="joinModal">
+    <div class="bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-700 text-right" dir="rtl">
+      <div class="text-center text-5xl mb-3">🏃‍♂️💨</div>
+      <h1 class="text-3xl font-black text-center text-yellow-400 mb-2">המירוץ למיליון</h1>
+      <p class="text-center text-slate-400 mb-6 text-sm">התחברו לקבוצה שלכם כדי להתחיל!</p>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-bold text-slate-300 mb-1">השם שלכם:</label>
+          <input type="text" id="playerNameInput" class="w-full p-3.5 rounded-xl bg-slate-900 border-2 border-slate-600 focus:border-yellow-400 text-white font-bold" placeholder="שם פרטי...">
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-slate-300 mb-1">בחרו קבוצה:</label>
+          <select id="teamSelect" class="w-full p-3.5 rounded-xl bg-slate-900 border-2 border-slate-600 focus:border-yellow-400 text-white font-bold">
+            <option value="1">קבוצה 1</option>
+            <option value="2">קבוצה 2</option>
+            <option value="3">קבוצה 3</option>
+            <option value="4">קבוצה 4</option>
+            <option value="5">קבוצה 5</option>
+            <option value="6">קבוצה 6</option>
+            <option value="7">קבוצה 7</option>
+            <option value="8">קבוצה 8</option>
+          </select>
+        </div>
+
+        <button id="btnJoin" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-black text-lg py-3.5 rounded-xl transition-all shadow-lg shadow-yellow-500/20 mt-2">
+          היכנס למשחק! 🏁
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- מודאל פתיחת מצרך חגיגי (Bounce Animation) -->
+  <div class="modal-overlay" id="ingredientModal">
+    <div class="bg-slate-800 p-8 rounded-3xl border-4 border-yellow-400 text-center shadow-[0_0_80px_rgba(250,204,21,0.6)] w-full max-w-md animate-bounce" dir="rtl">
+      <div class="text-7xl mb-4" id="ingredientModalIcon">🍪</div>
+      <h2 class="text-3xl font-black text-white mb-2">כל הכבוד!</h2>
+      <p class="text-lg text-yellow-300 mb-1 font-bold" id="ingredientModalSubtitle">פתחתם מצרך חדש:</p>
+      <p class="text-3xl text-white font-black mb-4" id="ingredientModalTitle">שם המצרך</p>
+      <p class="text-slate-300 text-sm mb-6 italic" id="ingredientModalDesc">תיאור המצרך...</p>
+      <button id="btnCloseModal" class="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-black text-xl px-8 py-3 rounded-xl w-full shadow-lg">
+        מעולה, ממשיכים במירוץ! 🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- מסך חסימת ריקרול (סבוטאז') -->
+  <div class="rickroll-overlay" id="rickrollOverlay">
+    <div class="text-6xl mb-3 animate-bounce">🛑🕺⚡</div>
+    <h2 class="text-3xl font-black text-red-500 mb-2">קבוצה יריבה עיכבה אתכם!</h2>
+    <p class="text-slate-300 mb-4 text-sm">צפו בריקרול עד תום הטיימר...</p>
+    <div class="rickroll-timer text-3xl font-black text-red-500 mb-4" id="rickrollTimer">15 שניות</div>
+    <iframe width="340" height="220" src="" title="Rickroll" class="rounded-xl border-2 border-red-500 shadow-2xl max-w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen playsinline></iframe>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/stations.js"></script>
+  <script src="/js/audio.js"></script>
+  <script src="/js/spot-difference.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
