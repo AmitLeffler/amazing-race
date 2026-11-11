@@ -66,62 +66,66 @@ const rickrollVideo = document.getElementById('rickrollVideo');
 const catVideoOverlay = document.getElementById('catVideoOverlay');
 const catVideoTimerEl = document.getElementById('catVideoTimer');
 const catVideoPlayer = document.getElementById('catVideoPlayer');
-const unmuteCatBtn = document.getElementById('unmuteCatBtn');
+const catVideoWarning = document.getElementById('catVideoWarning');
 let catVideoTimerInterval = null;
 
 const meniMamtaraOverlay = document.getElementById('meniMamtaraOverlay');
 const meniMamtaraTimerEl = document.getElementById('meniMamtaraTimer');
 const meniMamtaraPlayer = document.getElementById('meniMamtaraPlayer');
-const unmuteMeniBtn = document.getElementById('unmuteMeniBtn');
+const meniMamtaraWarning = document.getElementById('meniMamtaraWarning');
 let meniMamtaraTimerInterval = null;
 
-const unmuteRickrollBtn = document.getElementById('unmuteRickrollBtn');
+const rickrollWarning = document.getElementById('rickrollWarning');
 
-function setupVideoAudioUnmute(video, unmuteBtn, overlay) {
+function enforceVideoSound(video, warningEl, overlay) {
   if (!video) return;
 
-  const doUnmute = () => {
+  const forceUnmute = () => {
     try {
       video.muted = false;
       video.volume = 1.0;
-      if (unmuteBtn) unmuteBtn.style.display = 'none';
       if (video.paused) video.play();
+      if (warningEl) warningEl.style.display = 'none';
     } catch (e) {
-      console.warn("doUnmute error:", e);
-    }
-  };
-
-  if (unmuteBtn) {
-    unmuteBtn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      doUnmute();
-    };
-  }
-
-  const onScreenTouch = () => {
-    if (video.muted) {
-      doUnmute();
+      console.warn("forceUnmute error:", e);
     }
   };
 
   if (overlay) {
-    overlay.addEventListener('click', onScreenTouch);
-    overlay.addEventListener('touchstart', onScreenTouch, { passive: true });
-    overlay.addEventListener('pointerdown', onScreenTouch, { passive: true });
+    overlay.addEventListener('click', forceUnmute);
+    overlay.addEventListener('touchstart', forceUnmute, { passive: true });
+    overlay.addEventListener('pointerdown', forceUnmute, { passive: true });
   }
 
+  if (warningEl) {
+    warningEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      forceUnmute();
+    });
+  }
+
+  // אירוע לחיצה כללי על המסך
+  const onGlobalGesture = () => {
+    if (overlay && overlay.classList.contains('active')) {
+      forceUnmute();
+    }
+  };
+  window.addEventListener('click', onGlobalGesture);
+  window.addEventListener('touchstart', onGlobalGesture, { passive: true });
+  window.addEventListener('keydown', onGlobalGesture);
+
+  // ניסיון ראשוני לנגן עם סאונד מלא
   video.muted = false;
   video.volume = 1.0;
   const playPromise = video.play();
   if (playPromise !== undefined) {
     playPromise.then(() => {
-      if (unmuteBtn) unmuteBtn.style.display = 'none';
+      if (warningEl) warningEl.style.display = 'none';
     }).catch(err => {
-      console.warn("Autoplay with sound blocked. Fallback to muted + show unmute button:", err);
+      console.warn("Autoplay with sound blocked by browser policy. Pausing countdown until sound gesture:", err);
       video.muted = true;
-      video.play().catch(e => console.error("Muted play failed:", e));
-      if (unmuteBtn) unmuteBtn.style.display = 'inline-flex';
+      video.play().catch(e => console.error("Muted fallback play error:", e));
+      if (warningEl) warningEl.style.display = 'block';
     });
   }
 }
@@ -1525,7 +1529,7 @@ function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
   const video = document.getElementById('rickrollVideo');
   if (video) {
     video.currentTime = 0;
-    setupVideoAudioUnmute(video, unmuteRickrollBtn, rickrollOverlay);
+    enforceVideoSound(video, rickrollWarning, rickrollOverlay);
   }
 
   let timeLeft = seconds;
@@ -1534,6 +1538,16 @@ function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
   }
 
   rickrollTimerInterval = setInterval(() => {
+    if (video) {
+      const isSilent = video.muted || video.volume === 0 || video.paused;
+      if (isSilent) {
+        if (rickrollWarning) rickrollWarning.style.display = 'block';
+        return; // כפיית סאונד - הטיימר לא יתקדם אם הסאונד מושתק!
+      } else {
+        if (rickrollWarning) rickrollWarning.style.display = 'none';
+      }
+    }
+
     timeLeft--;
     if (rickrollTimerEl) {
       rickrollTimerEl.textContent = `${Math.max(0, timeLeft)} שניות`;
@@ -1542,7 +1556,7 @@ function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
       clearInterval(rickrollTimerInterval);
       rickrollTimerInterval = null;
       rickrollOverlay.classList.remove('active');
-      if (unmuteRickrollBtn) unmuteRickrollBtn.style.display = 'none';
+      if (rickrollWarning) rickrollWarning.style.display = 'none';
       if (video) {
         video.pause();
         video.currentTime = 0;
@@ -1580,7 +1594,7 @@ function triggerCatVideo(seconds = 60, stationId, hint = '', hintIndex = 1, vide
       video.load();
     }
     video.currentTime = 0;
-    setupVideoAudioUnmute(video, unmuteCatBtn, catVideoOverlay);
+    enforceVideoSound(video, catVideoWarning, catVideoOverlay);
   }
 
   let timeLeft = seconds;
@@ -1589,6 +1603,16 @@ function triggerCatVideo(seconds = 60, stationId, hint = '', hintIndex = 1, vide
   }
 
   catVideoTimerInterval = setInterval(() => {
+    if (video) {
+      const isSilent = video.muted || video.volume === 0 || video.paused;
+      if (isSilent) {
+        if (catVideoWarning) catVideoWarning.style.display = 'block';
+        return; // כפיית סאונד - הטיימר לא יתקדם אם הסאונד מושתק!
+      } else {
+        if (catVideoWarning) catVideoWarning.style.display = 'none';
+      }
+    }
+
     timeLeft--;
     if (catVideoTimerEl) {
       catVideoTimerEl.textContent = `${Math.max(0, timeLeft)} שניות`;
@@ -1597,7 +1621,7 @@ function triggerCatVideo(seconds = 60, stationId, hint = '', hintIndex = 1, vide
       clearInterval(catVideoTimerInterval);
       catVideoTimerInterval = null;
       catVideoOverlay.classList.remove('active');
-      if (unmuteCatBtn) unmuteCatBtn.style.display = 'none';
+      if (catVideoWarning) catVideoWarning.style.display = 'none';
       try { sessionStorage.removeItem('active_penalty'); } catch (e) {}
       if (video) {
         video.pause();
@@ -1647,7 +1671,7 @@ function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
     }
     applyStartTime();
 
-    setupVideoAudioUnmute(video, unmuteMeniBtn, meniMamtaraOverlay);
+    enforceVideoSound(video, meniMamtaraWarning, meniMamtaraOverlay);
   }
 
   let timeLeft = seconds;
@@ -1656,6 +1680,16 @@ function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
   }
 
   meniMamtaraTimerInterval = setInterval(() => {
+    if (video) {
+      const isSilent = video.muted || video.volume === 0 || video.paused;
+      if (isSilent) {
+        if (meniMamtaraWarning) meniMamtaraWarning.style.display = 'block';
+        return; // כפיית סאונד - הטיימר לא יתקדם אם הסאונד מושתק!
+      } else {
+        if (meniMamtaraWarning) meniMamtaraWarning.style.display = 'none';
+      }
+    }
+
     timeLeft--;
     if (meniMamtaraTimerEl) {
       meniMamtaraTimerEl.textContent = `${Math.max(0, timeLeft)} שניות`;
@@ -1664,7 +1698,7 @@ function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
       clearInterval(meniMamtaraTimerInterval);
       meniMamtaraTimerInterval = null;
       meniMamtaraOverlay.classList.remove('active');
-      if (unmuteMeniBtn) unmuteMeniBtn.style.display = 'none';
+      if (meniMamtaraWarning) meniMamtaraWarning.style.display = 'none';
       try { sessionStorage.removeItem('active_penalty'); } catch (e) {}
       if (video) {
         video.pause();
