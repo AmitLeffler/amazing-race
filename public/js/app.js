@@ -3,14 +3,13 @@ const socket = io();
 
 let currentTeamState = null;
 let currentStationData = null;
-let userId = localStorage.getItem('race_user_id');
-let userName = localStorage.getItem('race_user_name');
-let teamId = localStorage.getItem('race_team_id');
-
+let userId = sessionStorage.getItem('race_user_id');
 if (!userId) {
-  userId = 'usr_' + Math.random().toString(36).substring(2, 9);
-  localStorage.setItem('race_user_id', userId);
+  userId = 'usr_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
+  sessionStorage.setItem('race_user_id', userId);
 }
+let userName = sessionStorage.getItem('race_user_name') || localStorage.getItem('race_user_name');
+let teamId = sessionStorage.getItem('race_team_id') || localStorage.getItem('race_team_id');
 
 // אלמנטים גלובליים
 const joinModal = document.getElementById('joinModal');
@@ -183,11 +182,25 @@ btnJoin.addEventListener('click', () => {
 
   teamId = selectedTeam;
   userName = name;
+  sessionStorage.setItem('race_team_id', teamId);
+  sessionStorage.setItem('race_user_name', userName);
   localStorage.setItem('race_team_id', teamId);
   localStorage.setItem('race_user_name', userName);
 
   joinModal.classList.remove('active');
   socket.emit('join_team', { teamId, memberName: userName, userId });
+});
+
+// שליחת הודעת עזיבה מיידית ביציאה/סגירת טאב
+window.addEventListener('beforeunload', () => {
+  if (teamId && userId) {
+    socket.emit('leave_team', { teamId, userId });
+  }
+});
+window.addEventListener('pagehide', () => {
+  if (teamId && userId) {
+    socket.emit('leave_team', { teamId, userId });
+  }
 });
 
 // עדכון נתוני תחנות בזמן אמת מהמנהל
@@ -303,6 +316,11 @@ socket.on('sabotage_alert', ({ byTeam, type, durationSeconds }) => {
 socket.on('sabotage_launched', ({ targetTeamId, message }) => {
   if (window.gameAudio) window.gameAudio.playSuccessSound();
   alert(message || `שיגרתם בהצלחה חסימת ריקרול לקבוצה ${targetTeamId}!`);
+});
+
+// הצגת הודעת שגיאה / חסימה מהשרת
+socket.on('error_message', ({ message }) => {
+  if (message) alert(message);
 });
 
 // עדכון הצבעות חסימה בלייב
@@ -691,6 +709,40 @@ function renderBlockingBoard(slot, state, station) {
   }
 }
 
+function formatMmSs(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+let solutionLockoutInterval = null;
+function startSolutionLockoutTicker(initialSeconds) {
+  if (solutionLockoutInterval) {
+    clearInterval(solutionLockoutInterval);
+    solutionLockoutInterval = null;
+  }
+  let sec = initialSeconds;
+  const timerEl = document.getElementById('solutionLockoutTimer');
+  if (!timerEl || sec <= 0) return;
+
+  solutionLockoutInterval = setInterval(() => {
+    sec--;
+    const el = document.getElementById('solutionLockoutTimer');
+    if (el) {
+      el.textContent = formatMmSs(Math.max(0, sec));
+    }
+    if (sec <= 0) {
+      clearInterval(solutionLockoutInterval);
+      solutionLockoutInterval = null;
+      if (currentTeamState) {
+        currentTeamState.canRevealSolution = true;
+        currentTeamState.solutionLockoutSeconds = 0;
+        updateUI(currentTeamState);
+      }
+    }
+  }, 1000);
+}
+
 // ווידג'ט רמזים ופתרון קבוצתי (תמיכה בריבוי רמזים או ללא רמזים, כל רמז נפתח בהצבעת 1/3 קבוצה + סרטון חתולים של דקה, ובסוף חשיפת הפתרון המוגדר בפאנל מנהלים בהצבעת 1/2 קבוצה + מני ממטרה)
 function renderHintWidget(slot, station, state) {
   if (!slot) return;
@@ -772,6 +824,20 @@ function renderHintWidget(slot, station, state) {
             <p class="text-white text-lg font-black leading-relaxed font-mono bg-slate-900/95 p-3 rounded-xl border border-emerald-500/50 text-center tracking-wider">${solText || 'תשובה לא הוגדרה'}</p>
             <p class="text-xs text-emerald-300/80 text-center mt-2 font-semibold">הזינו את הקוד/התשובה הזו למעבר לתחנה הבאה! ✨</p>
           </div>
+        ` : (state.solutionLockoutSeconds > 0 && !state.canRevealSolution ? `
+          <div class="bg-slate-900/90 border border-amber-600/40 p-4 rounded-2xl text-center shadow-md">
+            <div class="flex items-center justify-center gap-2 text-amber-300 font-bold text-sm mb-1.5">
+              <span class="text-lg">⏳</span>
+              <span>חשיפת הפתרון נעולה כעת</span>
+            </div>
+            <p class="text-slate-300 text-xs mb-3 max-w-sm mx-auto font-medium">
+              פתיחת התשובה תתאפשר רק לאחר ${state.solutionLockoutMinutes !== undefined ? state.solutionLockoutMinutes : 10} דקות ללא הצלחה בתחנה זו.
+            </p>
+            <div class="inline-flex items-center gap-2.5 bg-slate-950 px-5 py-2 rounded-xl border border-amber-500/50 shadow-inner">
+              <span class="text-slate-400 text-xs font-bold">זמן שנותר לפתיחה:</span>
+              <span class="text-amber-300 font-mono font-black text-base tracking-wider" id="solutionLockoutTimer">${formatMmSs(state.solutionLockoutSeconds)}</span>
+            </div>
+          </div>
         ` : `
           <div class="bg-slate-900/90 border border-yellow-600/50 p-4 rounded-2xl text-center shadow-md">
             <button id="btnVoteSolution" class="bg-yellow-600/30 hover:bg-yellow-600/50 border-2 border-yellow-500 text-yellow-300 font-bold py-2.5 px-5 rounded-xl text-sm transition-all inline-flex items-center gap-2 shadow-sm cursor-pointer active:scale-95">
@@ -785,7 +851,7 @@ function renderHintWidget(slot, station, state) {
               ${totalHints > 0 ? 'מיציתם את כל הרמזים?' : 'תקועים?'} נדרש אישור של לפחות חצי מהקבוצה (${solNeeded} מתוך ${totalMembers}) וצפייה בשיר של מני ממטרה לחשיפת התשובה הנכונה!
             </p>
           </div>
-        `}
+        `)}
       ` : (solutionBlockedNotice ? `
         <div class="bg-slate-900/70 border border-slate-700/80 p-3.5 rounded-2xl text-center text-slate-300 text-xs font-semibold shadow-inner">
           🔒 בתחנה זו הוגדר על ידי המנהל כי לא ניתן לחשוף את הפתרון. עליכם לפצח את החידה בעצמכם! 💪
@@ -810,6 +876,10 @@ function renderHintWidget(slot, station, state) {
         socket.emit('vote_solution', { stationId: station.id });
       }
     });
+  }
+
+  if (state.solutionLockoutSeconds > 0 && !state.canRevealSolution && !isSolUnlocked) {
+    startSolutionLockoutTicker(state.solutionLockoutSeconds);
   }
 }
 
