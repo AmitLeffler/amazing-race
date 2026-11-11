@@ -95,6 +95,8 @@
             <option value="6">קבוצה 6</option>
             <option value="7">קבוצה 7</option>
             <option value="8">קבוצה 8</option>
+            <option value="9">קבוצה 9</option>
+            <option value="10">קבוצה 10</option>
           </select>
         </div>
 
@@ -126,6 +128,34 @@
     <p class="text-slate-300 mb-4 text-sm">צפו בריקרול עד תום הטיימר...</p>
     <div class="rickroll-timer text-3xl font-black text-red-500 mb-4" id="rickrollTimer">15 שניות</div>
     <iframe width="340" height="220" src="" title="Rickroll" class="rounded-xl border-2 border-red-500 shadow-2xl max-w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen playsinline></iframe>
+  </div>
+
+  <!-- מסך סרטון חתולים לרמז (עונש דקה שלמה) -->
+  <div class="rickroll-overlay" id="catVideoOverlay">
+    <div class="text-6xl mb-2 animate-bounce">🐱 🐾 😸</div>
+    <h2 class="text-2xl sm:text-3xl font-black text-amber-400 mb-1">מחיר הרמז: סרטון חתולים! 🐱</h2>
+    <p class="text-slate-200 mb-2 text-xs sm:text-sm max-w-md px-4 text-center">
+      ביקשתם רמז? עליכם לצפות בסרטון חתולים במשך דקה שלמה (60 שניות) כדי לקבל אותו!
+    </p>
+    <div class="text-3xl font-black text-yellow-400 mb-3 font-mono" id="catVideoTimer">60 שניות</div>
+    <div class="w-full max-w-[360px] sm:max-w-[420px] aspect-video rounded-2xl overflow-hidden border-2 border-amber-500 shadow-2xl mx-auto">
+      <iframe id="catVideoIframe" width="100%" height="100%" src="" title="Cat Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen playsinline></iframe>
+    </div>
+    <p class="text-[11px] text-amber-300/80 mt-3 font-semibold">לא ניתן לדלג! הרמז ייחשף מיד בסיום הדקה 💡</p>
+  </div>
+
+  <!-- מסך שיר מני ממטרה לחשיפת פתרון מלא (עונש דקה שלמה) -->
+  <div class="rickroll-overlay" id="meniMamtaraOverlay">
+    <div class="text-6xl mb-2 animate-bounce">🚿 🎶 🕺</div>
+    <h2 class="text-2xl sm:text-3xl font-black text-yellow-400 mb-1">מחיר הפתרון: מני ממטרה! 🚿</h2>
+    <p class="text-slate-200 mb-2 text-xs sm:text-sm max-w-md px-4 text-center">
+      ביקשתם לראות את הפתרון? עליכם לצפות ולהאזין לשיר של מני ממטרה במשך דקה שלמה (60 שניות)!
+    </p>
+    <div class="text-3xl font-black text-cyan-400 mb-3 font-mono" id="meniMamtaraTimer">60 שניות</div>
+    <div class="w-full max-w-[360px] sm:max-w-[420px] aspect-video rounded-2xl overflow-hidden border-2 border-yellow-400 shadow-2xl mx-auto">
+      <iframe id="meniMamtaraIframe" width="100%" height="100%" src="" title="Meni Mamtara Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen playsinline></iframe>
+    </div>
+    <p class="text-[11px] text-yellow-300/80 mt-3 font-semibold">לא ניתן לדלג! הפתרון המלא ייחשף מיד בסיום הדקה 🎯</p>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

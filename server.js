@@ -32,6 +32,7 @@ function loadStationConfigs() {
             if (cfg.question !== undefined && cfg.question !== '') st.question = cfg.question;
             if (cfg.answer !== undefined && cfg.answer !== '') {
               st.answer = cfg.answer;
+              st.solution = cfg.answer;
               if (Array.isArray(st.validAnswers)) {
                 if (!st.validAnswers.includes(cfg.answer)) {
                   st.validAnswers.unshift(cfg.answer);
@@ -40,7 +41,16 @@ function loadStationConfigs() {
                 st.validAnswers = [cfg.answer];
               }
             }
-            if (cfg.hint !== undefined && cfg.hint !== '') st.hint = cfg.hint;
+            if (Array.isArray(cfg.hints)) {
+              st.hints = cfg.hints.map(h => String(h).trim()).filter(h => h.length > 0);
+              st.hint = st.hints[0] || '';
+            } else if (cfg.hint !== undefined && cfg.hint !== '') {
+              st.hint = cfg.hint;
+              st.hints = [cfg.hint];
+            } else if (cfg.hints === undefined && cfg.hint === undefined) {
+              if (st.hint) st.hints = [st.hint];
+              else st.hints = [];
+            }
           }
         });
       }
@@ -56,22 +66,26 @@ function loadStationConfigs() {
 function saveStationConfigs() {
   try {
     STATIONS.sort((a, b) => a.id - b.id);
-    const dataToSave = STATIONS.map(s => ({
-      id: s.id,
-      name: s.name,
-      location: s.location || '',
-      question: s.question || '',
-      answer: s.answer || '',
-      hint: s.hint || ''
-    }));
+    const dataToSave = STATIONS.map(s => {
+      const hintsArr = Array.isArray(s.hints) ? s.hints : (s.hint ? [s.hint] : []);
+      return {
+        id: s.id,
+        name: s.name,
+        location: s.location || '',
+        question: s.question || '',
+        answer: s.answer || '',
+        hint: (hintsArr && hintsArr[0]) || s.hint || '',
+        hints: hintsArr
+      };
+    });
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(dataToSave, null, 2), 'utf8');
   } catch (err) {
     console.error('Error saving stations config:', err);
   }
 }
 
-// פונקציית עדכון תחנה גלובלית (שם, מספר, מיקום, שאלה, תשובה, רמז)
-function applyStationUpdate({ stationId, newId, name, location, question, answer, hint }) {
+// פונקציית עדכון תחנה גלובלית (שם, מספר, מיקום, שאלה, תשובה, רמזים)
+function applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints }) {
   const sId = parseInt(stationId);
   const st = STATIONS.find(s => s.id === sId);
   if (!st) return null;
@@ -96,6 +110,7 @@ function applyStationUpdate({ stationId, newId, name, location, question, answer
   if (question !== undefined) st.question = question;
   if (answer !== undefined && String(answer).trim() !== '') {
     st.answer = String(answer).trim();
+    st.solution = st.answer; // סנכרון מלא לפאנל המנהלים
     if (Array.isArray(st.validAnswers)) {
       st.validAnswers = st.validAnswers.filter(a => !a.includes('?'));
       if (!st.validAnswers.includes(st.answer)) {
@@ -105,18 +120,26 @@ function applyStationUpdate({ stationId, newId, name, location, question, answer
       st.validAnswers = [st.answer];
     }
   }
-  if (hint !== undefined) st.hint = hint;
+
+  if (hints !== undefined && Array.isArray(hints)) {
+    st.hints = hints.map(h => String(h).trim()).filter(h => h.length > 0);
+    st.hint = st.hints[0] || '';
+  } else if (hint !== undefined) {
+    st.hint = String(hint).trim();
+    st.hints = st.hint ? [st.hint] : [];
+  }
 
   saveStationConfigs();
   return st;
 }
 
 // הוספת תחנה חדשה למשחק
-function addStation({ id, name, location, question, answer, hint }) {
+function addStation({ id, name, location, question, answer, hint, hints }) {
   const finalStation = STATIONS.find(s => s.type === 'admin_custom_final' || s.id === 17);
   const normalStations = STATIONS.filter(s => s !== finalStation);
 
   const newId = parseInt(id) || (normalStations.length + 1);
+  const hintsArr = Array.isArray(hints) ? hints.map(h => String(h).trim()).filter(h => h.length > 0) : (hint ? [String(hint).trim()] : []);
   const newStation = {
     id: newId,
     name: name || `תחנה ${newId}`,
@@ -125,8 +148,10 @@ function addStation({ id, name, location, question, answer, hint }) {
     location: location || '',
     question: question || '',
     answer: answer || '1',
+    solution: answer || '1',
     validAnswers: answer ? [answer] : ['1'],
-    hint: hint || ''
+    hint: hintsArr[0] || '',
+    hints: hintsArr
   };
 
   normalStations.push(newStation);
@@ -198,10 +223,10 @@ loadStationConfigs();
 
 let systemConfig = {
   strictMode: true,
-  minRequiredAnswers: 5
+  minRequiredAnswers: 5,
+  numTeams: 10
 };
 
-const NUM_TEAMS = 8;
 const teams = {};
 
 // סידור תחנות לקבוצה: רוטציה מעגלית של כל תחנות הביניים, ותחנת הסיום תמיד אחרונה בהכרח אצל כולן!
@@ -220,28 +245,37 @@ function generateStationOrderForTeam(teamIndex) {
   return reordered;
 }
 
-for (let i = 1; i <= NUM_TEAMS; i++) {
-  const teamId = String(i);
-  teams[teamId] = {
-    id: teamId,
-    name: `קבוצה ${i}`,
-    currentStepIndex: 0,
-    stationOrder: generateStationOrderForTeam(i),
-    completedStations: [],
-    members: [],
-    stationAnswers: {},
-    unlockedIngredients: [],
-    hintVotes: {}, // { [stationId]: Set<userId> }
-    unlockedHints: {}, // { [stationId]: true }
-    sabotageVotes: {},
-    sabotagedUntil: null,
-    sabotageType: null,
-    sabotageByTeam: null,
-    lockoutUntil: null,
-    doubleAgentUserId: null,
-    isGameCompleted: false
-  };
+// יצירה והבטחת קיום של קבוצות עד המספר המבוקש (דיפולט: 10)
+function ensureTeams(count = 10) {
+  for (let i = 1; i <= count; i++) {
+    const teamId = String(i);
+    if (!teams[teamId]) {
+      teams[teamId] = {
+        id: teamId,
+        name: `קבוצה ${i}`,
+        currentStepIndex: 0,
+        stationOrder: generateStationOrderForTeam(i),
+        completedStations: [],
+        members: [],
+        stationAnswers: {},
+        unlockedIngredients: [],
+        hintVotes: {},
+        unlockedHints: {},
+        solutionVotes: {},
+        unlockedSolutions: {},
+        sabotageVotes: {},
+        sabotagedUntil: null,
+        sabotageType: null,
+        sabotageByTeam: null,
+        lockoutUntil: null,
+        doubleAgentUserId: null,
+        isGameCompleted: false
+      };
+    }
+  }
 }
+
+ensureTeams(systemConfig.numTeams);
 
 function getRequiredAnswersCount(team) {
   const totalMembers = team.members.length;
@@ -364,6 +398,8 @@ io.on('connection', (socket) => {
         unlockedIngredients: [],
         hintVotes: {},
         unlockedHints: {},
+        solutionVotes: {},
+        unlockedSolutions: {},
         sabotageVotes: {},
         sabotagedUntil: null,
         sabotageType: null,
@@ -399,13 +435,33 @@ io.on('connection', (socket) => {
     notifyAdmin();
   });
 
-  // הצבעה לרמז קבוצתי (נפתח בהצבעת לפחות שליש מחברי הקבוצה)
+  // הצבעה לרמז קבוצתי (נפתח בנפרד לכל רמז בהצבעת לפחות שליש מחברי הקבוצה, מחיר: סרטון חתולים של דקה)
   socket.on('vote_hint', ({ stationId }) => {
     if (!currentTeamId || !currentUser) return;
     const team = teams[currentTeamId];
     if (!team) return;
 
+    if (!team.hintVotes) team.hintVotes = {};
+    if (!team.unlockedHints) team.unlockedHints = {};
+    if (!team.solutionVotes) team.solutionVotes = {};
+    if (!team.unlockedSolutions) team.unlockedSolutions = {};
+
     const sId = parseInt(stationId);
+    const st = STATIONS.find(s => s.id === sId);
+    const stHints = st ? (Array.isArray(st.hints) ? st.hints : (st.hint ? [st.hint] : [])) : [];
+
+    let unlockedCount = 0;
+    if (typeof team.unlockedHints[sId] === 'number') {
+      unlockedCount = team.unlockedHints[sId];
+    } else if (team.unlockedHints[sId]) {
+      unlockedCount = 1;
+    }
+
+    // אם אין רמזים בכלל או שכבר נפתחו כל הרמזים
+    if (stHints.length === 0 || unlockedCount >= stHints.length) {
+      return;
+    }
+
     if (!team.hintVotes[sId]) {
       team.hintVotes[sId] = [];
     }
@@ -417,22 +473,159 @@ io.on('connection', (socket) => {
     const votesCount = team.hintVotes[sId].length;
     const totalMembers = Math.max(1, team.members.length);
     const needed = Math.max(1, Math.ceil(totalMembers / 3));
-    const st = STATIONS.find(s => s.id === sId);
 
     if (votesCount >= needed) {
-      team.unlockedHints[sId] = true;
-      io.to(`team_${currentTeamId}`).emit('hint_unlocked', {
+      const nextHintIndex = unlockedCount;
+      const nextHintText = stHints[nextHintIndex] || '';
+
+      // שיגור צפייה בסרטון חתולים של 60 שניות לכל הקבוצה כמחיר על חשיפת הרמז
+      io.to(`team_${currentTeamId}`).emit('cat_video_hint_start', {
         stationId: sId,
-        hint: st ? st.hint : ''
+        hintIndex: nextHintIndex + 1,
+        totalHints: stHints.length,
+        hint: nextHintText,
+        durationSeconds: 60
       });
+
+      // פתיחה אוטומטית כגיבוי לאחר 60 שניות
+      setTimeout(() => {
+        const curCount = typeof team.unlockedHints[sId] === 'number' ? team.unlockedHints[sId] : (team.unlockedHints[sId] ? 1 : 0);
+        if (curCount <= unlockedCount) {
+          team.unlockedHints[sId] = unlockedCount + 1;
+          team.hintVotes[sId] = [];
+          io.to(`team_${currentTeamId}`).emit('hint_unlocked', {
+            stationId: sId,
+            hintIndex: unlockedCount + 1,
+            totalHints: stHints.length,
+            hint: nextHintText,
+            unlockedHintsCount: unlockedCount + 1,
+            unlockedHintsList: stHints.slice(0, unlockedCount + 1)
+          });
+          emitTeamState(currentTeamId);
+          notifyAdmin();
+        }
+      }, 60000);
     } else {
       io.to(`team_${currentTeamId}`).emit('hint_votes_updated', {
+        stationId: sId,
+        count: votesCount,
+        needed: needed,
+        hintIndex: unlockedCount + 1,
+        totalHints: stHints.length
+      });
+    }
+
+    emitTeamState(currentTeamId);
+    notifyAdmin();
+  });
+
+  // סיום צפייה בסרטון חתולים של דקה - פתיחת הרמז
+  socket.on('cat_video_hint_completed', ({ stationId }) => {
+    if (!currentTeamId) return;
+    const team = teams[currentTeamId];
+    if (!team) return;
+    if (!team.unlockedHints) team.unlockedHints = {};
+    const sId = parseInt(stationId);
+    const st = STATIONS.find(s => s.id === sId);
+    const stHints = st ? (Array.isArray(st.hints) ? st.hints : (st.hint ? [st.hint] : [])) : [];
+
+    let unlockedCount = typeof team.unlockedHints[sId] === 'number' ? team.unlockedHints[sId] : (team.unlockedHints[sId] ? 1 : 0);
+    if (unlockedCount < stHints.length) {
+      unlockedCount++;
+      team.unlockedHints[sId] = unlockedCount;
+      team.hintVotes[sId] = [];
+    }
+
+    io.to(`team_${currentTeamId}`).emit('hint_unlocked', {
+      stationId: sId,
+      unlockedHintsCount: unlockedCount,
+      totalHints: stHints.length,
+      hint: stHints[unlockedCount - 1] || '',
+      unlockedHintsList: stHints.slice(0, unlockedCount)
+    });
+    emitTeamState(currentTeamId);
+    notifyAdmin();
+  });
+
+  // הצבעה לחשיפת פתרון מלא (מחייב לפחות חצי מחברי הקבוצה וצפייה בשיר של מני ממטרה - חושף במדויק את התשובה מפאנל המנהלים)
+  socket.on('vote_solution', ({ stationId }) => {
+    if (!currentTeamId || !currentUser) return;
+    const team = teams[currentTeamId];
+    if (!team) return;
+
+    if (!team.solutionVotes) team.solutionVotes = {};
+    if (!team.unlockedSolutions) team.unlockedSolutions = {};
+    if (!team.hintVotes) team.hintVotes = {};
+    if (!team.unlockedHints) team.unlockedHints = {};
+
+    const sId = parseInt(stationId);
+    if (!team.solutionVotes[sId]) {
+      team.solutionVotes[sId] = [];
+    }
+
+    if (!team.solutionVotes[sId].includes(currentUser.id)) {
+      team.solutionVotes[sId].push(currentUser.id);
+    }
+
+    const votesCount = team.solutionVotes[sId].length;
+    const totalMembers = Math.max(1, team.members.length);
+    const needed = Math.max(1, Math.ceil(totalMembers / 2));
+    const st = STATIONS.find(s => s.id === sId);
+    const solText = st ? (st.answer || st.solution || '') : '';
+
+    if (votesCount >= needed) {
+      if (!team.unlockedSolutions[sId]) {
+        // שיגור צפייה בשיר של מני ממטרה (60 שניות) לכל הקבוצה כמחיר על חשיפת הפתרון
+        io.to(`team_${currentTeamId}`).emit('meni_mamtara_solution_start', {
+          stationId: sId,
+          solution: solText,
+          durationSeconds: 60
+        });
+
+        // פתיחה אוטומטית כגיבוי לאחר 60 שניות
+        setTimeout(() => {
+          if (!team.unlockedSolutions[sId]) {
+            team.unlockedSolutions[sId] = true;
+            io.to(`team_${currentTeamId}`).emit('solution_unlocked', {
+              stationId: sId,
+              solution: solText
+            });
+            emitTeamState(currentTeamId);
+            notifyAdmin();
+          }
+        }, 60000);
+      } else {
+        io.to(`team_${currentTeamId}`).emit('solution_unlocked', {
+          stationId: sId,
+          solution: solText
+        });
+      }
+    } else {
+      io.to(`team_${currentTeamId}`).emit('solution_votes_updated', {
         stationId: sId,
         count: votesCount,
         needed: needed
       });
     }
 
+    emitTeamState(currentTeamId);
+    notifyAdmin();
+  });
+
+  // סיום צפייה בשיר של מני ממטרה של דקה - פתיחת הפתרון המלא
+  socket.on('meni_mamtara_solution_completed', ({ stationId }) => {
+    if (!currentTeamId) return;
+    const team = teams[currentTeamId];
+    if (!team) return;
+    if (!team.unlockedSolutions) team.unlockedSolutions = {};
+    const sId = parseInt(stationId);
+    const st = STATIONS.find(s => s.id === sId);
+    const solText = st ? (st.answer || st.solution || '') : '';
+    team.unlockedSolutions[sId] = true;
+    io.to(`team_${currentTeamId}`).emit('solution_unlocked', {
+      stationId: sId,
+      solution: solText
+    });
     emitTeamState(currentTeamId);
     notifyAdmin();
   });
@@ -585,9 +778,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('admin_update_station', ({ code, stationId, newId, name, location, question, answer, hint }) => {
+  socket.on('admin_update_station', ({ code, stationId, newId, name, location, question, answer, hint, hints }) => {
     if (code !== ADMIN_CODE) return;
-    const updated = applyStationUpdate({ stationId, newId, name, location, question, answer, hint });
+    const updated = applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints });
     if (updated) {
       io.emit('stations_config_updated', STATIONS);
       notifyAdmin();
@@ -597,9 +790,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('admin_add_station', ({ code, id, name, location, question, answer, hint }) => {
+  socket.on('admin_add_station', ({ code, id, name, location, question, answer, hint, hints }) => {
     if (code !== ADMIN_CODE) return;
-    const newStation = addStation({ id, name, location, question, answer, hint });
+    const newStation = addStation({ id, name, location, question, answer, hint, hints });
     io.emit('stations_config_updated', STATIONS);
     notifyAdmin();
     for (const tId of Object.keys(teams)) {
@@ -651,6 +844,8 @@ io.on('connection', (socket) => {
       teams[tId].unlockedIngredients = [];
       teams[tId].hintVotes = {};
       teams[tId].unlockedHints = {};
+      teams[tId].solutionVotes = {};
+      teams[tId].unlockedSolutions = {};
       teams[tId].sabotageVotes = {};
       teams[tId].sabotagedUntil = null;
       teams[tId].lockoutUntil = null;
@@ -660,9 +855,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('admin_set_config', ({ strictMode, minRequiredAnswers }) => {
+  socket.on('admin_set_config', ({ strictMode, minRequiredAnswers, numTeams }) => {
     if (typeof strictMode === 'boolean') systemConfig.strictMode = strictMode;
     if (minRequiredAnswers) systemConfig.minRequiredAnswers = parseInt(minRequiredAnswers);
+    if (numTeams && parseInt(numTeams) > 0) {
+      systemConfig.numTeams = parseInt(numTeams);
+      ensureTeams(systemConfig.numTeams);
+    }
     io.emit('config_updated', systemConfig);
     notifyAdmin();
   });
@@ -674,6 +873,7 @@ function emitTeamState(teamId) {
 
   const currentStationIndex = team.stationOrder[team.currentStepIndex];
   const currentStation = STATIONS[currentStationIndex];
+  if (!currentStation) return;
   const answersForCurStation = team.stationAnswers[currentStation.id] || {};
   const answeredCount = Object.keys(answersForCurStation).length;
   const requiredCount = getRequiredAnswersCount(team);
@@ -681,13 +881,28 @@ function emitTeamState(teamId) {
 
   const totalMembers = Math.max(1, team.members.length);
   const hintVotesNeeded = Math.max(1, Math.ceil(totalMembers / 3));
-  const votesList = team.hintVotes[currentStation.id] || [];
-  const hintUnlocked = !!team.unlockedHints[currentStation.id] || votesList.length >= hintVotesNeeded;
-  if (hintUnlocked && !team.unlockedHints[currentStation.id]) {
-    team.unlockedHints[currentStation.id] = true;
+  const stHints = Array.isArray(currentStation.hints) ? currentStation.hints : (currentStation.hint ? [currentStation.hint] : []);
+
+  let unlockedHintsCount = 0;
+  if (typeof team.unlockedHints[currentStation.id] === 'number') {
+    unlockedHintsCount = team.unlockedHints[currentStation.id];
+  } else if (team.unlockedHints[currentStation.id]) {
+    unlockedHintsCount = 1;
   }
-  const hintsUsedCount = Object.keys(team.unlockedHints || {}).length;
-  const unlockedHintsList = Object.keys(team.unlockedHints || {}).map(Number);
+  const unlockedHintsList = stHints.slice(0, unlockedHintsCount);
+
+  let hintsUsedCount = 0;
+  Object.values(team.unlockedHints || {}).forEach(val => {
+    if (typeof val === 'number') hintsUsedCount += val;
+    else if (val) hintsUsedCount += 1;
+  });
+
+  const votesList = (team.hintVotes && team.hintVotes[currentStation.id]) || [];
+
+  const solutionVotesNeeded = Math.max(1, Math.ceil(totalMembers / 2));
+  const solVotesList = (team.solutionVotes && team.solutionVotes[currentStation.id]) || [];
+  const solutionUnlocked = !!(team.unlockedSolutions && team.unlockedSolutions[currentStation.id]);
+  const solutionText = currentStation.answer || currentStation.solution || '';
 
   io.to(`team_${teamId}`).emit('team_state_sync', {
     teamId: team.id,
@@ -713,12 +928,19 @@ function emitTeamState(teamId) {
     sabotagedUntil: team.sabotagedUntil,
     isBlockingStation: (currentStation.id === 5 || currentStation.isBlockingStation || currentStation.type === 'blocking_station'),
     strictMode: systemConfig.strictMode,
+    hints: stHints,
+    unlockedHintsCount,
+    unlockedHintsList,
     hintVotesCount: votesList.length,
     hintVotesNeeded,
-    hintUnlocked,
-    hintText: currentStation.hint || '',
+    hintUnlocked: unlockedHintsCount > 0,
+    hintText: unlockedHintsList[unlockedHintsList.length - 1] || (stHints[0] || ''),
     hintsUsedCount,
-    unlockedHintsList,
+    solutionUnlocked,
+    solutionVotesCount: solVotesList.length,
+    solutionVotesNeeded,
+    solutionText,
+    numTeams: systemConfig.numTeams,
     isGameCompleted: team.isGameCompleted
   });
 }
@@ -749,11 +971,11 @@ app.get('/api/admin/stations', (req, res) => {
 });
 
 app.post('/api/admin/update-station', (req, res) => {
-  const { code, stationId, newId, name, location, question, answer, hint } = req.body;
+  const { code, stationId, newId, name, location, question, answer, hint, hints } = req.body;
   if (code !== ADMIN_CODE) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
-  const updated = applyStationUpdate({ stationId, newId, name, location, question, answer, hint });
+  const updated = applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints });
   if (!updated) {
     return res.status(404).json({ error: 'Station not found' });
   }
@@ -768,11 +990,11 @@ app.post('/api/admin/update-station', (req, res) => {
 });
 
 app.post('/api/admin/add-station', (req, res) => {
-  const { code, id, name, location, question, answer, hint } = req.body;
+  const { code, id, name, location, question, answer, hint, hints } = req.body;
   if (code !== ADMIN_CODE) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
-  const newStation = addStation({ id, name, location, question, answer, hint });
+  const newStation = addStation({ id, name, location, question, answer, hint, hints });
 
   io.emit('stations_config_updated', STATIONS);
   notifyAdmin();

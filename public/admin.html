@@ -188,11 +188,18 @@
     <!-- אזור טאב 1: מצב הקבוצות בלייב -->
     <div id="tabContentTeams">
       <div style="background: #111827; border: 1px solid #1f2937; border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <span style="font-weight: 700;">מצב פעילות:</span>
-          <button id="btnToggleStrictMode" class="btn-small" style="background: #059669; padding: 6px 14px; font-weight: 700;">
-            מצב תחרות מלא (חובה 5 שחקנים או חצי מהקבוצה)
-          </button>
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700;">מצב פעילות:</span>
+            <button id="btnToggleStrictMode" class="btn-small" style="background: #059669; padding: 6px 14px; font-weight: 700;">
+              מצב תחרות מלא (חובה 5 שחקנים או חצי מהקבוצה)
+            </button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; border-right: 1px solid #374151; padding-right: 12px;">
+            <span style="font-weight: 700;">מספר קבוצות:</span>
+            <input type="number" id="inputTeamsCount" min="1" max="30" value="10" style="width: 65px; background: #0f172a; border: 1px solid #475569; color: #fbbf24; font-weight: 900; text-align: center; border-radius: 8px; padding: 6px; font-size: 1rem;">
+            <button id="btnSaveTeamsCount" class="btn-small" style="background: #0284c7; padding: 6px 12px; font-weight: 700;">עדכן</button>
+          </div>
         </div>
         <div style="color: #94a3b8; font-size: 0.9rem;">
           קישור למכשירים ניידים: <strong style="color: #38bdf8;">http://172.20.10.2:3000</strong>
@@ -269,9 +276,18 @@
             <div>
               <label class="form-label">❓ 3. שאלת התחנה / הוראות לשחקנים:</label>
               <textarea id="newStationQuestion" class="form-textarea" rows="2" placeholder="טקסט החידה או ההוראה..."></textarea>
+            </div>
 
-              <label class="form-label">💡 4. רמז (נחשף לאחר 3 הצבעות קבוצתיות):</label>
-              <textarea id="newStationHint" class="form-textarea" rows="2" placeholder="טקסט הרמז..."></textarea>
+            <div style="grid-column: 1 / -1; background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label class="form-label" style="color: #fbbf24; font-weight: 800; margin: 0;">
+                  💡 4. רמזים לתחנה החדשה (ניתן להוסיף כמה שרוצים, או להשאיר ריק ללא רמזים):
+                </label>
+                <button type="button" id="btnAddNewStationHint" class="btn-small" style="background: #0284c7; padding: 4px 10px; font-size: 0.8rem; font-weight: bold;">
+                  ➕ הוסף רמז
+                </button>
+              </div>
+              <div id="newStationHintsList" style="display: flex; flex-direction: column; gap: 8px;"></div>
             </div>
           </div>
 
@@ -348,6 +364,8 @@
     const btnAdminLogin = document.getElementById('btnAdminLogin');
     const teamsAdminGrid = document.getElementById('teamsAdminGrid');
     const btnToggleStrictMode = document.getElementById('btnToggleStrictMode');
+    const inputTeamsCount = document.getElementById('inputTeamsCount');
+    const btnSaveTeamsCount = document.getElementById('btnSaveTeamsCount');
     const stationEditorsContainer = document.getElementById('stationEditorsContainer');
 
     // טאבים
@@ -358,7 +376,7 @@
     const tabContentEditor = document.getElementById('tabContentEditor');
     const tabContentCheat = document.getElementById('tabContentCheat');
 
-    let currentSystemConfig = { strictMode: true, minRequiredAnswers: 5 };
+    let currentSystemConfig = { strictMode: true, minRequiredAnswers: 5, numTeams: 10 };
     let cachedStations = [];
     let currentAdminCode = '';
 
@@ -431,6 +449,9 @@
         btnToggleStrictMode.textContent = 'מצב בדיקה מהיר (מספיק שחקן 1 למעבר)';
         btnToggleStrictMode.style.background = '#d97706';
       }
+      if (currentSystemConfig.numTeams && inputTeamsCount) {
+        inputTeamsCount.value = currentSystemConfig.numTeams;
+      }
     }
 
     btnToggleStrictMode.addEventListener('click', () => {
@@ -438,21 +459,36 @@
       socket.emit('admin_set_config', { strictMode: newMode });
     });
 
+    if (btnSaveTeamsCount) {
+      btnSaveTeamsCount.addEventListener('click', () => {
+        const val = parseInt(inputTeamsCount.value);
+        if (val > 0) {
+          socket.emit('admin_set_config', { numTeams: val });
+        }
+      });
+    }
+
     // כרטיסי קבוצות בלייב ומדד רמזים
     function renderTeams(teams) {
       teamsAdminGrid.innerHTML = '';
       const hintsSummaryRow = document.getElementById('hintsSummaryRow');
       if (hintsSummaryRow) hintsSummaryRow.innerHTML = '';
 
-      Object.values(teams).forEach(team => {
+      const maxTeams = currentSystemConfig.numTeams || 10;
+      Object.values(teams).filter(team => parseInt(team.id) <= maxTeams || team.members.length > 0).forEach(team => {
         const curStationIdx = team.stationOrder[team.currentStepIndex];
         const station = cachedStations.find(s => s.id === (curStationIdx + 1)) || { id: curStationIdx + 1, name: `תחנה ${curStationIdx + 1}` };
         const answersForSt = team.stationAnswers[station.id] || {};
         const answeredCount = Object.keys(answersForSt).length;
         const totalRemaining = team.stationOrder.length - team.completedStations.length;
         const isActive = team.members.length > 0;
-        const hintsUnlocked = team.unlockedHints ? Object.keys(team.unlockedHints) : [];
-        const hintsCount = hintsUnlocked.length;
+        let hintsCount = 0;
+        const hintsUnlockedObj = team.unlockedHints || {};
+        Object.entries(hintsUnlockedObj).forEach(([stId, val]) => {
+          if (typeof val === 'number') hintsCount += val;
+          else if (val) hintsCount += 1;
+        });
+        const hintsUnlockedStations = Object.keys(hintsUnlockedObj);
 
         // הוספה לשורת המדד המרוכז
         if (hintsSummaryRow) {
@@ -488,7 +524,7 @@
                 <span style="font-weight: 700; color: #fef08a;">💡 רמזים שנלקחו:</span>
                 <strong style="color: ${hintsCount > 0 ? '#fbbf24' : '#9ca3af'}; font-size: 1.15rem; font-weight: 900;">${hintsCount} רמזים</strong>
               </div>
-              ${hintsCount > 0 ? `<div style="font-size: 0.72rem; color: #fde047; margin-top: 3px;">בתחנות מס': ${hintsUnlocked.join(', ')}</div>` : '<div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">לא נלקחו רמזים עדיין</div>'}
+              ${hintsCount > 0 ? `<div style="font-size: 0.72rem; color: #fde047; margin-top: 3px;">בתחנות מס': ${hintsUnlockedStations.join(', ')}</div>` : '<div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">לא נלקחו רמזים עדיין</div>'}
             </div>
 
             ${team.isGameCompleted ? '<div style="color: #4ade80; font-weight: 900; margin-top: 4px;">🏆 סיימו את המירוץ בהצלחה!</div>' : ''}
@@ -524,7 +560,7 @@
       });
     }
 
-    // עריכת 17 התחנות (מיקום, שאלה, תשובה נכונה, רמז)
+    // עריכת כל התחנות (מיקום, שאלה, תשובה נכונה, רמזים דינמיים)
     function renderStationEditors(stations) {
       stationEditorsContainer.innerHTML = '';
 
@@ -532,6 +568,9 @@
         const card = document.createElement('div');
         card.className = 'station-editor-card';
         card.id = `stationCard_${st.id}`;
+
+        const hintsList = Array.isArray(st.hints) ? [...st.hints] : (st.hint ? [st.hint] : []);
+
         card.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -568,13 +607,61 @@
             <div>
               <label class="form-label">❓ 3. השאלה / ההוראה המוצגת לשחקנים:</label>
               <textarea class="form-textarea st-question" rows="2" placeholder="טקסט השאלה או ההוראות...">${st.question || ''}</textarea>
+            </div>
 
-              <label class="form-label">💡 4. רמז (נחשף רק כאשר לפחות 3 שחקנים מצביעים עבורו):</label>
-              <textarea class="form-textarea st-hint" rows="2" placeholder="טקסט הרמז שיוצג לאחר 3 הצבעות...">${st.hint || ''}</textarea>
+            <div style="grid-column: 1 / -1; background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-top: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <label class="form-label" style="color: #fbbf24; font-weight: 800; margin: 0;">
+                  💡 4. רמזים לתחנה זו (<span class="hints-count-label">${hintsList.length} רמזים מוגדרים</span>):
+                </label>
+                <button type="button" class="btn-small btn-add-hint" style="background: #0284c7; padding: 5px 12px; font-weight: bold; font-size: 0.85rem;">
+                  ➕ הוסף רמז לתחנה
+                </button>
+              </div>
+              <p style="color: #94a3b8; font-size: 0.8rem; margin: 0 0 10px 0;">
+                כל רמז ייפתח בנפרד לשחקנים בהצבעת שליש מהקבוצה וסרטון חתולים של דקה. אם אין רמזים כלל, השחקנים יוכלו לפתוח ישירות את הפתרון המלא במני ממטרה.
+              </p>
+              <div class="st-hints-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
             </div>
           </div>
           <div class="save-msg" style="color: #34d399; font-size: 0.8rem; font-weight: bold; margin-top: 4px; display: none;">✓ השינויים נשמרו בהצלחה וסונכרנו לשחקנים!</div>
         `;
+
+        const hintsContainer = card.querySelector('.st-hints-container');
+        const countLabel = card.querySelector('.hints-count-label');
+
+        function updateHintsDisplay(hints) {
+          hintsContainer.innerHTML = '';
+          if (hints.length === 0) {
+            hintsContainer.innerHTML = `<div style="color: #94a3b8; font-size: 0.85rem; padding: 8px; font-style: italic; background: rgba(0,0,0,0.2); border-radius: 6px;">אין רמזים מוגדרים לתחנה זו. השחקנים יקבלו גישה ישירה לחשיפת הפתרון המלא במני ממטרה. לחצו על "➕ הוסף רמז לתחנה" להוספה.</div>`;
+          } else {
+            hints.forEach((h, idx) => {
+              const row = document.createElement('div');
+              row.className = 'hint-item-row';
+              row.style.cssText = 'display: flex; gap: 8px; align-items: flex-start;';
+              row.innerHTML = `
+                <span style="background: #1e293b; color: #fbbf24; padding: 8px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; white-space: nowrap;">רמז #${idx + 1}</span>
+                <textarea class="form-textarea st-hint-item" rows="2" placeholder="טקסט רמז #${idx + 1}...">${h}</textarea>
+                <button type="button" class="btn-remove-hint" style="background: #dc2626; color: white; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 0.85rem;" title="מחק רמז זה">🗑️</button>
+              `;
+              row.querySelector('.btn-remove-hint').addEventListener('click', () => {
+                const curHints = Array.from(hintsContainer.querySelectorAll('.st-hint-item')).map(el => el.value);
+                curHints.splice(idx, 1);
+                updateHintsDisplay(curHints);
+              });
+              hintsContainer.appendChild(row);
+            });
+          }
+          if (countLabel) countLabel.textContent = `${hints.length} רמזים מוגדרים`;
+        }
+
+        updateHintsDisplay(hintsList);
+
+        card.querySelector('.btn-add-hint').addEventListener('click', () => {
+          const curHints = Array.from(hintsContainer.querySelectorAll('.st-hint-item')).map(el => el.value);
+          curHints.push('');
+          updateHintsDisplay(curHints);
+        });
 
         card.querySelector('.btn-save-station').addEventListener('click', () => {
           saveSingleStation(st.id);
@@ -600,7 +687,10 @@
       const location = card.querySelector('.st-location').value.trim();
       const question = card.querySelector('.st-question').value.trim();
       const answer = card.querySelector('.st-answer').value.trim();
-      const hint = card.querySelector('.st-hint').value.trim();
+
+      const hintInputs = card.querySelectorAll('.st-hint-item');
+      const hints = Array.from(hintInputs).map(i => i.value.trim()).filter(h => h.length > 0);
+      const hint = hints[0] || '';
 
       fetch('/api/admin/update-station', {
         method: 'POST',
@@ -613,7 +703,8 @@
           location,
           question,
           answer,
-          hint
+          hint,
+          hints
         })
       })
       .then(res => res.json())
@@ -670,7 +761,36 @@
     const newStationLocation = document.getElementById('newStationLocation');
     const newStationAnswer = document.getElementById('newStationAnswer');
     const newStationQuestion = document.getElementById('newStationQuestion');
-    const newStationHint = document.getElementById('newStationHint');
+    const newStationHintsList = document.getElementById('newStationHintsList');
+    const btnAddNewStationHint = document.getElementById('btnAddNewStationHint');
+
+    function renderNewStationHintRow(val = '') {
+      if (!newStationHintsList) return;
+      const count = newStationHintsList.children.length + 1;
+      const row = document.createElement('div');
+      row.className = 'new-hint-row';
+      row.style.cssText = 'display: flex; gap: 8px; align-items: flex-start;';
+      row.innerHTML = `
+        <span style="background: #1e293b; color: #fbbf24; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; white-space: nowrap;">רמז #${count}</span>
+        <textarea class="form-textarea new-st-hint-item" rows="2" placeholder="טקסט רמז #${count}...">${val}</textarea>
+        <button type="button" class="btn-remove-new-hint" style="background: #dc2626; color: white; border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer;" title="מחק רמז זה">🗑️</button>
+      `;
+      row.querySelector('.btn-remove-new-hint').addEventListener('click', () => {
+        row.remove();
+        // renumber
+        Array.from(newStationHintsList.children).forEach((child, i) => {
+          const span = child.querySelector('span');
+          if (span) span.textContent = `רמז #${i + 1}`;
+        });
+      });
+      newStationHintsList.appendChild(row);
+    }
+
+    if (btnAddNewStationHint) {
+      btnAddNewStationHint.addEventListener('click', () => {
+        renderNewStationHintRow('');
+      });
+    }
 
     if (btnOpenAddStationPanel) {
       btnOpenAddStationPanel.addEventListener('click', () => {
@@ -680,7 +800,7 @@
         newStationLocation.value = '';
         newStationAnswer.value = '';
         newStationQuestion.value = '';
-        newStationHint.value = '';
+        if (newStationHintsList) newStationHintsList.innerHTML = '';
         addStationPanel.style.display = 'block';
         addStationPanel.scrollIntoView({ behavior: 'smooth' });
       });
@@ -700,7 +820,10 @@
         const location = newStationLocation.value.trim();
         const answer = newStationAnswer.value.trim();
         const question = newStationQuestion.value.trim();
-        const hint = newStationHint.value.trim();
+        
+        const hintInputs = document.querySelectorAll('#newStationHintsList .new-st-hint-item');
+        const hints = Array.from(hintInputs).map(i => i.value.trim()).filter(h => h.length > 0);
+        const hint = hints[0] || '';
 
         if (!name) {
           alert('נא להזין שם לתחנה החדשה!');
@@ -717,7 +840,8 @@
             location,
             question,
             answer,
-            hint
+            hint,
+            hints
           })
         })
         .then(res => res.json())
@@ -753,7 +877,9 @@
       const filter = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
       stations.forEach(st => {
-        const textToMatch = `${st.id} ${st.name} ${st.location || ''} ${st.answer || ''} ${st.hint || ''}`.toLowerCase();
+        const hintsArr = Array.isArray(st.hints) ? st.hints : (st.hint ? [st.hint] : []);
+        const hintsString = hintsArr.join(' | ');
+        const textToMatch = `${st.id} ${st.name} ${st.location || ''} ${st.answer || ''} ${hintsString}`.toLowerCase();
         if (filter && !textToMatch.includes(filter)) return;
 
         const tr = document.createElement('tr');
@@ -773,7 +899,7 @@
             <input type="text" class="form-input cheat-st-ans" value="${st.answer || ''}" placeholder="קוד סודי..." style="color: #4ade80; font-family: monospace; font-weight: 900; font-size: 1.05rem; width: 100%; background: #0f172a; border-color: #059669;">
           </td>
           <td style="vertical-align: middle;">
-            <input type="text" class="form-input cheat-st-hint" value="${st.hint || ''}" placeholder="רמז / הערות למנחה..." style="width: 100%; font-size: 0.85rem;">
+            <input type="text" class="form-input cheat-st-hint" value="${hintsString || st.hint || ''}" placeholder="רמזים (מופרדים ב-|) / הערות למנחה..." style="width: 100%; font-size: 0.85rem;">
           </td>
           <td style="text-align: center; vertical-align: middle;">
             <button class="btn-small btn-save-cheat-row" data-id="${st.id}" style="background: #10b981; font-weight: bold; padding: 7px 12px; width: 100%; font-size: 0.85rem;">
@@ -797,7 +923,9 @@
       const name = tr.querySelector('.cheat-st-name').value.trim();
       const location = tr.querySelector('.cheat-st-loc').value.trim();
       const answer = tr.querySelector('.cheat-st-ans').value.trim();
-      const hint = tr.querySelector('.cheat-st-hint').value.trim();
+      const hintsRaw = tr.querySelector('.cheat-st-hint').value.trim();
+      const hints = hintsRaw ? hintsRaw.split('|').map(h => h.trim()).filter(h => h.length > 0) : [];
+      const hint = hints[0] || '';
 
       const original = cachedStations.find(s => s.id === stationId);
       const question = original ? original.question : '';
@@ -812,6 +940,7 @@
           location,
           answer,
           hint,
+          hints,
           question
         })
       })

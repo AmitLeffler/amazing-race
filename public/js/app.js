@@ -15,6 +15,28 @@ if (!userId) {
 // אלמנטים גלובליים
 const joinModal = document.getElementById('joinModal');
 const teamSelect = document.getElementById('teamSelect');
+
+function updateTeamSelectOptions(count = 10) {
+  if (!teamSelect) return;
+  const curVal = teamSelect.value;
+  teamSelect.innerHTML = '';
+  for (let i = 1; i <= count; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `קבוצה ${i}`;
+    teamSelect.appendChild(opt);
+  }
+  if (curVal && parseInt(curVal) <= count) {
+    teamSelect.value = curVal;
+  }
+}
+
+socket.on('config_updated', (cfg) => {
+  if (cfg && cfg.numTeams) {
+    updateTeamSelectOptions(cfg.numTeams);
+    if (currentTeamState) currentTeamState.numTeams = cfg.numTeams;
+  }
+});
 const playerNameInput = document.getElementById('playerNameInput');
 const btnJoin = document.getElementById('btnJoin');
 
@@ -39,6 +61,16 @@ const btnCloseModal = document.getElementById('btnCloseModal');
 
 const rickrollOverlay = document.getElementById('rickrollOverlay');
 const rickrollTimerEl = document.getElementById('rickrollTimer');
+
+const catVideoOverlay = document.getElementById('catVideoOverlay');
+const catVideoTimerEl = document.getElementById('catVideoTimer');
+const catVideoIframe = document.getElementById('catVideoIframe');
+let catVideoTimerInterval = null;
+
+const meniMamtaraOverlay = document.getElementById('meniMamtaraOverlay');
+const meniMamtaraTimerEl = document.getElementById('meniMamtaraTimer');
+const meniMamtaraIframe = document.getElementById('meniMamtaraIframe');
+let meniMamtaraTimerInterval = null;
 
 let acknowledgedRulesForStation11 = false;
 let rickrollTimerInterval = null;
@@ -104,10 +136,12 @@ socket.on('ingredients_unlocked_event', ({ ingredients }) => {
 });
 
 // רמז נפתח
-socket.on('hint_unlocked', ({ stationId, hint }) => {
+socket.on('hint_unlocked', ({ stationId, hint, unlockedHintsCount, unlockedHintsList }) => {
   if (currentTeamState && currentTeamState.currentStationId === stationId) {
     currentTeamState.hintUnlocked = true;
     currentTeamState.hintText = hint;
+    if (unlockedHintsCount !== undefined) currentTeamState.unlockedHintsCount = unlockedHintsCount;
+    if (unlockedHintsList !== undefined) currentTeamState.unlockedHintsList = unlockedHintsList;
     if (window.gameAudio) window.gameAudio.playSuccessSound();
     updateUI(currentTeamState);
   }
@@ -120,8 +154,39 @@ socket.on('hint_votes_updated', ({ stationId, count, needed }) => {
     const voteBtnSpan = document.getElementById('hintVotesBadge');
     const totalMembers = Math.max(1, currentTeamState.membersCount || 1);
     const neededCount = currentTeamState.hintVotesNeeded || needed || Math.max(1, Math.ceil(totalMembers / 3));
-    if (voteBtnSpan) voteBtnSpan.textContent = `${count} / ${neededCount} הצבעות`;
+    if (voteBtnSpan) voteBtnSpan.textContent = `${count} / ${neededCount} אישרו`;
   }
+});
+
+// קבלת אירוע צפייה בסרטון חתולים לפתיחת רמז (דקה שלמה)
+socket.on('cat_video_hint_start', ({ stationId, hint, durationSeconds }) => {
+  triggerCatVideo(durationSeconds || 60, stationId, hint);
+});
+
+// קבלת אירוע פתיחת פתרון מלא
+socket.on('solution_unlocked', ({ stationId, solution }) => {
+  if (currentTeamState && currentTeamState.currentStationId === stationId) {
+    currentTeamState.solutionUnlocked = true;
+    currentTeamState.solutionText = solution;
+    if (window.gameAudio) window.gameAudio.playSuccessSound();
+    updateUI(currentTeamState);
+  }
+});
+
+socket.on('solution_votes_updated', ({ stationId, count, needed }) => {
+  if (currentTeamState && currentTeamState.currentStationId === stationId) {
+    currentTeamState.solutionVotesCount = count;
+    if (needed) currentTeamState.solutionVotesNeeded = needed;
+    const voteBtnSpan = document.getElementById('solutionVotesBadge');
+    const totalMembers = Math.max(1, currentTeamState.membersCount || 1);
+    const neededCount = currentTeamState.solutionVotesNeeded || needed || Math.max(1, Math.ceil(totalMembers / 2));
+    if (voteBtnSpan) voteBtnSpan.textContent = `${count} / ${neededCount} אישרו`;
+  }
+});
+
+// קבלת אירוע צפייה בשיר של מני ממטרה לפתיחת הפתרון המלא (דקה שלמה)
+socket.on('meni_mamtara_solution_start', ({ stationId, solution, durationSeconds }) => {
+  triggerMeniMamtara(durationSeconds || 60, stationId, solution);
 });
 
 // קבלת אירוע חסימת ריקרול
@@ -400,7 +465,7 @@ function renderBlockingBoard(slot, state, station) {
 
       <!-- רשת כפתורי הצבעה לכל קבוצה -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-xl mx-auto mb-6">
-        ${[1, 2, 3, 4, 5, 6, 7, 8].filter(t => String(t) !== myTeamId).map(t => {
+        ${Array.from({ length: state.numTeams || (currentTeamState && currentTeamState.numTeams) || 10 }, (_, i) => i + 1).filter(t => String(t) !== myTeamId).map(t => {
           const count = voteCounts[String(t)] || 0;
           const isMyPick = String(myVote) === String(t);
           const isLead = leadingTeam && String(leadingTeam) === String(t);
@@ -501,45 +566,119 @@ function renderBlockingBoard(slot, state, station) {
   }
 }
 
-// ווידג'ט רמז קבוצתי (נפתח בהצבעת לפחות שליש מחברי הקבוצה)
+// ווידג'ט רמזים ופתרון קבוצתי (תמיכה בריבוי רמזים או ללא רמזים, כל רמז נפתח בהצבעת 1/3 קבוצה + סרטון חתולים של דקה, ובסוף חשיפת הפתרון המוגדר בפאנל מנהלים בהצבעת 1/2 קבוצה + מני ממטרה)
 function renderHintWidget(slot, station, state) {
   if (!slot) return;
-  const isUnlocked = state.hintUnlocked;
-  const votesCount = state.hintVotesCount || 0;
+
   const totalMembers = Math.max(1, state.membersCount || 1);
   const needed = state.hintVotesNeeded || Math.max(1, Math.ceil(totalMembers / 3));
-  const hintText = state.hintText || station.hint || '';
+  const votesCount = state.hintVotesCount || 0;
 
-  if (isUnlocked) {
-    slot.innerHTML = `
-      <div class="bg-amber-950/80 border-2 border-amber-500 p-4 rounded-2xl text-right text-amber-200 text-sm font-bold shadow-lg mt-6" dir="rtl">
-        <div class="flex items-center gap-2 mb-1 text-yellow-400 font-black text-base">
-          <span>💡</span>
-          <span>רמז שנחשף (אושר על ידי לפחות שליש מהקבוצה – ${needed} חברים):</span>
+  const hints = Array.isArray(state.hints) ? state.hints : (Array.isArray(station.hints) ? station.hints : (station.hint ? [station.hint] : []));
+  const totalHints = hints.length;
+
+  let unlockedCount = 0;
+  if (typeof state.unlockedHintsCount === 'number') {
+    unlockedCount = state.unlockedHintsCount;
+  } else if (state.hintUnlocked) {
+    unlockedCount = 1;
+  }
+
+  const unlockedHintsList = Array.isArray(state.unlockedHintsList) ? state.unlockedHintsList : hints.slice(0, unlockedCount);
+  const hasMoreHints = unlockedCount < totalHints;
+  const canRequestSolution = (unlockedCount >= totalHints || totalHints === 0);
+
+  const isSolUnlocked = !!state.solutionUnlocked;
+  const solVotesCount = state.solutionVotesCount || 0;
+  const solNeeded = state.solutionVotesNeeded || Math.max(1, Math.ceil(totalMembers / 2));
+  const solText = state.solutionText || station.answer || station.solution || '';
+
+  slot.innerHTML = `
+    <div class="mt-6 space-y-4 text-right" dir="rtl">
+      <!-- 1. הצגת רמזים שנחשפו כבר -->
+      ${unlockedCount > 0 ? `
+        <div class="bg-amber-950/80 border-2 border-amber-500/80 p-4 rounded-2xl text-amber-200 text-sm font-bold shadow-lg space-y-3">
+          <div class="flex items-center justify-between border-b border-amber-600/50 pb-2 flex-wrap gap-2">
+            <span class="text-yellow-400 font-black text-base flex items-center gap-1.5">
+              <span>💡</span>
+              <span>רמזים שנחשפו (${unlockedCount} מתוך ${totalHints}):</span>
+            </span>
+            <span class="text-xs bg-amber-900/90 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-600/60 font-mono">
+              מחיר ששולם: ${unlockedCount} סרטוני חתולים 🐱
+            </span>
+          </div>
+          <div class="space-y-2.5">
+            ${unlockedHintsList.map((h, i) => `
+              <div class="bg-slate-900/90 p-3 rounded-xl border border-amber-600/40">
+                <div class="text-yellow-400 font-bold text-xs mb-1">💡 רמז #${i + 1}:</div>
+                <p class="text-slate-100 text-sm leading-relaxed">${h}</p>
+              </div>
+            `).join('')}
+          </div>
         </div>
-        <p class="pr-6 text-slate-100 text-sm leading-relaxed">${hintText || 'אין רמז נוסף לתחנה זו.'}</p>
-      </div>
-    `;
-  } else {
-    slot.innerHTML = `
-      <div class="bg-slate-900/80 border border-slate-700/80 p-3.5 rounded-2xl text-center mt-6" dir="rtl">
-        <button id="btnVoteHint" class="bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/60 text-amber-300 font-bold py-2.5 px-5 rounded-xl text-sm transition-all inline-flex items-center gap-2 shadow-sm cursor-pointer active:scale-95">
-          <span>💡</span>
-          <span>הצבע לפתיחת רמז קבוצתי</span>
-          <span id="hintVotesBadge" class="bg-amber-900/80 px-2.5 py-0.5 rounded-full text-xs font-mono text-yellow-300 border border-amber-600/50 font-black">
-            ${votesCount} / ${needed} הצבעות
-          </span>
-        </button>
-        <p class="text-slate-400 text-[11px] mt-1.5">הרמז נחשף לכל הקבוצה כאשר לפחות שליש מהחברים מצביעים (${needed} מתוך ${totalMembers})</p>
-      </div>
-    `;
+      ` : ''}
 
-    const btn = document.getElementById('btnVoteHint');
-    if (btn) {
-      btn.addEventListener('click', () => {
+      <!-- 2. כפתור בקשת רמז נוסף (אם נותרו רמזים) -->
+      ${hasMoreHints ? `
+        <div class="bg-slate-900/90 border border-amber-600/50 p-4 rounded-2xl text-center shadow-md">
+          <button id="btnVoteHint" class="bg-amber-600/30 hover:bg-amber-600/50 border-2 border-amber-500/70 text-amber-300 font-bold py-2.5 px-5 rounded-xl text-sm transition-all inline-flex items-center gap-2 shadow-sm cursor-pointer active:scale-95">
+            <span class="text-base">💡</span>
+            <span>בקשת רמז נוסף (רמז ${unlockedCount + 1} מתוך ${totalHints}) - מחיר: סרטון חתולים 🐱</span>
+            <span id="hintVotesBadge" class="bg-amber-900/90 px-2.5 py-0.5 rounded-full text-xs font-mono text-yellow-300 border border-amber-600 font-black">
+              ${votesCount} / ${needed} אישרו
+            </span>
+          </button>
+          <p class="text-slate-300 text-xs mt-2 font-medium">
+            חשיפת כל רמז מחייבת הצבעה של לפחות שליש מהקבוצה (${needed} שחקנים) וצפייה בסרטון חתולים של 60 שניות 🐱
+          </p>
+        </div>
+      ` : ''}
+
+      <!-- 3. אזור חשיפת הפתרון המלא (אם אין רמזים בכלל, או שכל הרמזים כבר נפתחו) -->
+      ${canRequestSolution ? `
+        ${isSolUnlocked ? `
+          <div class="bg-emerald-950/90 border-2 border-emerald-500 p-4 rounded-2xl shadow-lg">
+            <div class="flex items-center gap-2 mb-2 text-emerald-400 font-black text-base">
+              <span>🎯</span>
+              <span>הפתרון המלא שנחשף (התשובה מפאנל מנהלים):</span>
+            </div>
+            <p class="text-white text-lg font-black leading-relaxed font-mono bg-slate-900/95 p-3 rounded-xl border border-emerald-500/50 text-center tracking-wider">${solText || 'תשובה לא הוגדרה'}</p>
+            <p class="text-xs text-emerald-300/80 text-center mt-2 font-semibold">הזינו את הקוד/התשובה הזו למעבר לתחנה הבאה! ✨</p>
+          </div>
+        ` : `
+          <div class="bg-slate-900/90 border border-yellow-600/50 p-4 rounded-2xl text-center shadow-md">
+            <button id="btnVoteSolution" class="bg-yellow-600/30 hover:bg-yellow-600/50 border-2 border-yellow-500 text-yellow-300 font-bold py-2.5 px-5 rounded-xl text-sm transition-all inline-flex items-center gap-2 shadow-sm cursor-pointer active:scale-95">
+              <span class="text-base">🔓</span>
+              <span>חשיפת הפתרון המלא (מחיר: שיר מני ממטרה של דקה 🚿🎶)</span>
+              <span id="solutionVotesBadge" class="bg-yellow-900/90 px-2.5 py-0.5 rounded-full text-xs font-mono text-yellow-300 border border-yellow-600 font-black">
+                ${solVotesCount} / ${solNeeded} אישרו
+              </span>
+            </button>
+            <p class="text-slate-300 text-xs mt-2 font-medium">
+              ${totalHints > 0 ? 'מיציתם את כל הרמזים?' : 'תקועים?'} נדרש אישור של לפחות חצי מהקבוצה (${solNeeded} מתוך ${totalMembers}) וצפייה בשיר של מני ממטרה לחשיפת התשובה הנכונה!
+            </p>
+          </div>
+        `}
+      ` : ''}
+    </div>
+  `;
+
+  const btnH = document.getElementById('btnVoteHint');
+  if (btnH) {
+    btnH.addEventListener('click', () => {
+      if (confirm(`פתיחת רמז ${unlockedCount + 1} תחייב את כל חברי הקבוצה לצפות בסרטון חתולים במשך דקה שלמה (60 שניות). האם להצביע לפתיחת הרמז?`)) {
         socket.emit('vote_hint', { stationId: station.id });
-      });
-    }
+      }
+    });
+  }
+
+  const btnS = document.getElementById('btnVoteSolution');
+  if (btnS) {
+    btnS.addEventListener('click', () => {
+      if (confirm('חשיפת הפתרון המלא תחייב את כל חברי הקבוצה לצפות ולהאזין לשיר של מני ממטרה במשך דקה שלמה (60 שניות). האם להצביע לחשיפת הפתרון?')) {
+        socket.emit('vote_solution', { stationId: station.id });
+      }
+    });
   }
 }
 
@@ -1284,6 +1423,80 @@ function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
       rickrollTimerInterval = null;
       rickrollOverlay.classList.remove('active');
       if (iframe) iframe.src = '';
+    }
+  }, 1000);
+}
+
+// הפעלת סרטון חתולים לרמז (60 שניות מלאות)
+function triggerCatVideo(seconds = 60, stationId, hint = '') {
+  if (catVideoTimerInterval) {
+    clearInterval(catVideoTimerInterval);
+    catVideoTimerInterval = null;
+  }
+
+  if (!catVideoOverlay) return;
+  catVideoOverlay.classList.add('active');
+
+  if (catVideoIframe) {
+    // סרטון חתולים פעיל וזמין להטמעה ביוטיוב: Surprised Kitty (0Bmhjf0rKe8)
+    catVideoIframe.src = 'https://www.youtube.com/embed/0Bmhjf0rKe8?autoplay=1&mute=0&controls=0&playsinline=1&loop=1&playlist=0Bmhjf0rKe8';
+  }
+
+  let timeLeft = seconds;
+  if (catVideoTimerEl) {
+    catVideoTimerEl.textContent = `${timeLeft} שניות`;
+  }
+
+  catVideoTimerInterval = setInterval(() => {
+    timeLeft--;
+    if (catVideoTimerEl) {
+      catVideoTimerEl.textContent = `${Math.max(0, timeLeft)} שניות`;
+    }
+    if (timeLeft <= 0) {
+      clearInterval(catVideoTimerInterval);
+      catVideoTimerInterval = null;
+      catVideoOverlay.classList.remove('active');
+      if (catVideoIframe) catVideoIframe.src = '';
+
+      if (window.gameAudio) window.gameAudio.playSuccessSound();
+      socket.emit('cat_video_hint_completed', { stationId });
+    }
+  }, 1000);
+}
+
+// הפעלת שיר מני ממטרה לחשיפת פתרון מלא (לפחות 60 שניות מלאות)
+function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
+  if (meniMamtaraTimerInterval) {
+    clearInterval(meniMamtaraTimerInterval);
+    meniMamtaraTimerInterval = null;
+  }
+
+  if (!meniMamtaraOverlay) return;
+  meniMamtaraOverlay.classList.add('active');
+
+  if (meniMamtaraIframe) {
+    // שיר מני ממטרה הרשמי פעיל וזמין להטמעה: ממטרה עם מטרה (qSsMW5p6DW8)
+    meniMamtaraIframe.src = 'https://www.youtube.com/embed/qSsMW5p6DW8?autoplay=1&mute=0&controls=0&playsinline=1&loop=1&playlist=qSsMW5p6DW8';
+  }
+
+  let timeLeft = seconds;
+  if (meniMamtaraTimerEl) {
+    meniMamtaraTimerEl.textContent = `${timeLeft} שניות`;
+  }
+
+  meniMamtaraTimerInterval = setInterval(() => {
+    timeLeft--;
+    if (meniMamtaraTimerEl) {
+      meniMamtaraTimerEl.textContent = `${Math.max(0, timeLeft)} שניות`;
+    }
+    if (timeLeft <= 0) {
+      clearInterval(meniMamtaraTimerInterval);
+      meniMamtaraTimerInterval = null;
+      meniMamtaraOverlay.classList.remove('active');
+      if (meniMamtaraIframe) meniMamtaraIframe.src = '';
+
+      if (window.gameAudio) window.gameAudio.playSuccessSound();
+      socket.emit('meni_mamtara_solution_completed', { stationId });
     }
   }, 1000);
 }

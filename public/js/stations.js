@@ -155,7 +155,7 @@ const STATIONS = [
     image: "/images/guess_the_colors.png",
     question: "התבוננו היטב ברמזים שבתמונה. עליכם לגלות מהו הצבע הנכון במשולש האמצעי (המסומן בעיגול אדום זוהר ⭕), ולבחור בו:",
     options: [
-      { id: "green", label: "🟢 ירוק", isCorrect: true, locationMsg: "🎯 צדקתם! הצבע הנכון הוא ירוק.\nהרמז שלח אתכם: לכו לספסלים והכניסו את הקוד שתמצאו שם.", targetCode: "ספסל402" },
+      { id: "green", label: "🟢 ירוק", isCorrect: true, locationMsg: "הרמז שלח אתכם: לכו לספסלים והכניסו את הקוד שתמצאו שם.", targetCode: "ספסל402" },
       { id: "purple", label: "🟣 סגול", isCorrect: false, locationMsg: "הרמז שלח אתכם: לכו לפח הזבל והכניסו את הקוד שתמצאו שם.", decoyCode: "פח300" },
       { id: "pink", label: "🌸 ורוד", isCorrect: false, locationMsg: "הרמז שלח אתכם: לכו לאוטובוסים והכניסו את הקוד שתמצאו שם.", decoyCode: "אוטובוס200" },
       { id: "blue", label: "🔵 כחול", isCorrect: false, locationMsg: "הרמז שלח אתכם: לכו לשלט הכניסה והכניסו את הקוד שתמצאו שם.", decoyCode: "שלט100" }
