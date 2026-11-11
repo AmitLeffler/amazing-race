@@ -61,16 +61,70 @@ const btnCloseModal = document.getElementById('btnCloseModal');
 
 const rickrollOverlay = document.getElementById('rickrollOverlay');
 const rickrollTimerEl = document.getElementById('rickrollTimer');
+const rickrollVideo = document.getElementById('rickrollVideo');
 
 const catVideoOverlay = document.getElementById('catVideoOverlay');
 const catVideoTimerEl = document.getElementById('catVideoTimer');
-const catVideoIframe = document.getElementById('catVideoIframe');
+const catVideoPlayer = document.getElementById('catVideoPlayer');
+const unmuteCatBtn = document.getElementById('unmuteCatBtn');
 let catVideoTimerInterval = null;
 
 const meniMamtaraOverlay = document.getElementById('meniMamtaraOverlay');
 const meniMamtaraTimerEl = document.getElementById('meniMamtaraTimer');
-const meniMamtaraIframe = document.getElementById('meniMamtaraIframe');
+const meniMamtaraPlayer = document.getElementById('meniMamtaraPlayer');
+const unmuteMeniBtn = document.getElementById('unmuteMeniBtn');
 let meniMamtaraTimerInterval = null;
+
+const unmuteRickrollBtn = document.getElementById('unmuteRickrollBtn');
+
+function setupVideoAudioUnmute(video, unmuteBtn, overlay) {
+  if (!video) return;
+
+  const doUnmute = () => {
+    try {
+      video.muted = false;
+      video.volume = 1.0;
+      if (unmuteBtn) unmuteBtn.style.display = 'none';
+      if (video.paused) video.play();
+    } catch (e) {
+      console.warn("doUnmute error:", e);
+    }
+  };
+
+  if (unmuteBtn) {
+    unmuteBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      doUnmute();
+    };
+  }
+
+  const onScreenTouch = () => {
+    if (video.muted) {
+      doUnmute();
+    }
+  };
+
+  if (overlay) {
+    overlay.addEventListener('click', onScreenTouch);
+    overlay.addEventListener('touchstart', onScreenTouch, { passive: true });
+    overlay.addEventListener('pointerdown', onScreenTouch, { passive: true });
+  }
+
+  video.muted = false;
+  video.volume = 1.0;
+  const playPromise = video.play();
+  if (playPromise !== undefined) {
+    playPromise.then(() => {
+      if (unmuteBtn) unmuteBtn.style.display = 'none';
+    }).catch(err => {
+      console.warn("Autoplay with sound blocked. Fallback to muted + show unmute button:", err);
+      video.muted = true;
+      video.play().catch(e => console.error("Muted play failed:", e));
+      if (unmuteBtn) unmuteBtn.style.display = 'inline-flex';
+    });
+  }
+}
 
 let acknowledgedRulesForStation11 = false;
 let rickrollTimerInterval = null;
@@ -88,6 +142,35 @@ if (teamId && userName) {
 } else {
   joinModal.classList.add('active');
 }
+
+// מאגר סרטוני חתולים שונים
+const CAT_VIDEOS = [
+  '/videos/cat_1.mp4',
+  '/videos/cat_2.mp4',
+  '/videos/cat_3.mp4',
+  '/videos/cat_4.mp4',
+  '/videos/cat_5.mp4'
+];
+
+function getCatVideoForHint(stationId, hintIndex) {
+  const sNum = parseInt(stationId) || 1;
+  const hNum = parseInt(hintIndex) || 1;
+  const idx = Math.abs((sNum * 3 + hNum - 1)) % CAT_VIDEOS.length;
+  return CAT_VIDEOS[idx];
+}
+
+// בדיקה מיידית בריענון דף (F5) האם היה עונש וידאו פעיל (פתרון או רמז) - מפעיל מחדש את הסרטון והטיימר מהתחלה!
+try {
+  const savedPenaltyRaw = sessionStorage.getItem('active_penalty');
+  if (savedPenaltyRaw) {
+    const savedPenalty = JSON.parse(savedPenaltyRaw);
+    if (savedPenalty && savedPenalty.type === 'solution') {
+      setTimeout(() => triggerMeniMamtara(savedPenalty.durationSeconds || 60, savedPenalty.stationId, savedPenalty.solution), 50);
+    } else if (savedPenalty && savedPenalty.type === 'hint') {
+      setTimeout(() => triggerCatVideo(savedPenalty.durationSeconds || 60, savedPenalty.stationId, savedPenalty.hint, savedPenalty.hintIndex || 1, savedPenalty.videoUrl), 50);
+    }
+  }
+} catch (e) {}
 
 btnJoin.addEventListener('click', () => {
   const selectedTeam = teamSelect.value;
@@ -137,6 +220,15 @@ socket.on('ingredients_unlocked_event', ({ ingredients }) => {
 
 // רמז נפתח
 socket.on('hint_unlocked', ({ stationId, hint, unlockedHintsCount, unlockedHintsList }) => {
+  try { sessionStorage.removeItem('active_penalty'); } catch (e) {}
+  if (catVideoTimerInterval) {
+    clearInterval(catVideoTimerInterval);
+    catVideoTimerInterval = null;
+  }
+  if (catVideoOverlay) catVideoOverlay.classList.remove('active');
+  const catVid = document.getElementById('catVideoPlayer');
+  if (catVid) { catVid.pause(); catVid.currentTime = 0; }
+
   if (currentTeamState && currentTeamState.currentStationId === stationId) {
     currentTeamState.hintUnlocked = true;
     currentTeamState.hintText = hint;
@@ -158,13 +250,22 @@ socket.on('hint_votes_updated', ({ stationId, count, needed }) => {
   }
 });
 
-// קבלת אירוע צפייה בסרטון חתולים לפתיחת רמז (דקה שלמה)
-socket.on('cat_video_hint_start', ({ stationId, hint, durationSeconds }) => {
-  triggerCatVideo(durationSeconds || 60, stationId, hint);
+// קבלת אירוע צפייה בסרטון חתולים לפתיחת רמז (דקה שלמה - סרטון שונה לכל רמז)
+socket.on('cat_video_hint_start', ({ stationId, hint, hintIndex, totalHints, durationSeconds, videoUrl }) => {
+  triggerCatVideo(durationSeconds || 60, stationId, hint, hintIndex || 1, videoUrl);
 });
 
 // קבלת אירוע פתיחת פתרון מלא
 socket.on('solution_unlocked', ({ stationId, solution }) => {
+  try { sessionStorage.removeItem('active_penalty'); } catch (e) {}
+  if (meniMamtaraTimerInterval) {
+    clearInterval(meniMamtaraTimerInterval);
+    meniMamtaraTimerInterval = null;
+  }
+  if (meniMamtaraOverlay) meniMamtaraOverlay.classList.remove('active');
+  const meniVid = document.getElementById('meniMamtaraPlayer');
+  if (meniVid) { meniVid.pause(); meniVid.currentTime = 125; }
+
   if (currentTeamState && currentTeamState.currentStationId === stationId) {
     currentTeamState.solutionUnlocked = true;
     currentTeamState.solutionText = solution;
@@ -234,6 +335,26 @@ function updateUI(state) {
   if (state.isGameCompleted) {
     renderVictoryScreen();
     return;
+  }
+
+  // בדיקה אם קיים עונש פעיל (פתרון או רמז) - אם המשתמש ריפרש, הסרטון והטיימר יתחילו מחדש מהתחלה!
+  if (state.activeSolutionPenalty && state.activeSolutionPenalty.stationId === state.currentStationId && !state.solutionUnlocked) {
+    if (!meniMamtaraOverlay || !meniMamtaraOverlay.classList.contains('active')) {
+      triggerMeniMamtara(state.activeSolutionPenalty.durationSeconds || 60, state.activeSolutionPenalty.stationId, state.activeSolutionPenalty.solution);
+    }
+  } else if (state.activeHintPenalty && state.activeHintPenalty.stationId === state.currentStationId) {
+    const curUnlocked = state.unlockedHintsCount || 0;
+    if (curUnlocked < state.activeHintPenalty.hintIndex) {
+      if (!catVideoOverlay || !catVideoOverlay.classList.contains('active')) {
+        triggerCatVideo(
+          state.activeHintPenalty.durationSeconds || 60,
+          state.activeHintPenalty.stationId,
+          state.activeHintPenalty.hint,
+          state.activeHintPenalty.hintIndex || 1,
+          state.activeHintPenalty.videoUrl
+        );
+      }
+    }
   }
 
   const station = state.currentStation || STATIONS.find(s => s.id === state.currentStationId);
@@ -586,7 +707,9 @@ function renderHintWidget(slot, station, state) {
 
   const unlockedHintsList = Array.isArray(state.unlockedHintsList) ? state.unlockedHintsList : hints.slice(0, unlockedCount);
   const hasMoreHints = unlockedCount < totalHints;
-  const canRequestSolution = (unlockedCount >= totalHints || totalHints === 0);
+  const allowsSolution = (station.allowSolutionReveal !== false && state.allowSolutionReveal !== false);
+  const canRequestSolution = allowsSolution && (unlockedCount >= totalHints || totalHints === 0);
+  const solutionBlockedNotice = (!allowsSolution && (unlockedCount >= totalHints || totalHints === 0));
 
   const isSolUnlocked = !!state.solutionUnlocked;
   const solVotesCount = state.solutionVotesCount || 0;
@@ -659,7 +782,11 @@ function renderHintWidget(slot, station, state) {
             </p>
           </div>
         `}
-      ` : ''}
+      ` : (solutionBlockedNotice ? `
+        <div class="bg-slate-900/70 border border-slate-700/80 p-3.5 rounded-2xl text-center text-slate-300 text-xs font-semibold shadow-inner">
+          🔒 בתחנה זו הוגדר על ידי המנהל כי לא ניתן לחשוף את הפתרון. עליכם לפצח את החידה בעצמכם! 💪
+        </div>
+      ` : '')}
     </div>
   `;
 
@@ -1375,7 +1502,7 @@ function renderWordInWord(container, station, state) {
   renderView();
 }
 
-// הפעלת ריקרול מסך מלא (15 שניות)
+// הפעלת ריקרול מסך מלא מקומי (15 שניות)
 function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
   if (rickrollTimerInterval) {
     clearInterval(rickrollTimerInterval);
@@ -1395,17 +1522,10 @@ function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
     if (descEl) descEl.textContent = 'קבוצה יריבה הפעילה עליכם חסימה! צפו בריקרול עד תום הטיימר...';
   }
 
-  const iframe = rickrollOverlay.querySelector('iframe');
-  if (iframe) {
-    iframe.src = `https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=0&controls=0&playsinline=1`;
-  }
-
-  if (window.gameAudio && typeof window.gameAudio.playRickrollSynth === 'function') {
-    try {
-      window.gameAudio.playRickrollSynth(seconds);
-    } catch (e) {
-      console.warn("Rickroll synth error:", e);
-    }
+  const video = document.getElementById('rickrollVideo');
+  if (video) {
+    video.currentTime = 0;
+    setupVideoAudioUnmute(video, unmuteRickrollBtn, rickrollOverlay);
   }
 
   let timeLeft = seconds;
@@ -1422,13 +1542,29 @@ function triggerRickroll(seconds = 15, type = 'sabotage', byTeam = '') {
       clearInterval(rickrollTimerInterval);
       rickrollTimerInterval = null;
       rickrollOverlay.classList.remove('active');
-      if (iframe) iframe.src = '';
+      if (unmuteRickrollBtn) unmuteRickrollBtn.style.display = 'none';
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+      }
     }
   }, 1000);
 }
 
-// הפעלת סרטון חתולים לרמז (60 שניות מלאות)
-function triggerCatVideo(seconds = 60, stationId, hint = '') {
+// הפעלת סרטון חתולים לרמז מקומי (60 שניות מלאות - סרטון שונה לכל רמז)
+function triggerCatVideo(seconds = 60, stationId, hint = '', hintIndex = 1, videoUrl = null) {
+  const chosenVideo = videoUrl || getCatVideoForHint(stationId, hintIndex);
+  try {
+    sessionStorage.setItem('active_penalty', JSON.stringify({
+      type: 'hint',
+      stationId,
+      hint,
+      hintIndex,
+      videoUrl: chosenVideo,
+      durationSeconds: seconds
+    }));
+  } catch (e) {}
+
   if (catVideoTimerInterval) {
     clearInterval(catVideoTimerInterval);
     catVideoTimerInterval = null;
@@ -1437,9 +1573,14 @@ function triggerCatVideo(seconds = 60, stationId, hint = '') {
   if (!catVideoOverlay) return;
   catVideoOverlay.classList.add('active');
 
-  if (catVideoIframe) {
-    // סרטון חתולים פעיל וזמין להטמעה ביוטיוב: Surprised Kitty (0Bmhjf0rKe8)
-    catVideoIframe.src = 'https://www.youtube.com/embed/0Bmhjf0rKe8?autoplay=1&mute=0&controls=0&playsinline=1&loop=1&playlist=0Bmhjf0rKe8';
+  const video = document.getElementById('catVideoPlayer');
+  if (video) {
+    if (video.getAttribute('src') !== chosenVideo) {
+      video.src = chosenVideo;
+      video.load();
+    }
+    video.currentTime = 0;
+    setupVideoAudioUnmute(video, unmuteCatBtn, catVideoOverlay);
   }
 
   let timeLeft = seconds;
@@ -1456,7 +1597,12 @@ function triggerCatVideo(seconds = 60, stationId, hint = '') {
       clearInterval(catVideoTimerInterval);
       catVideoTimerInterval = null;
       catVideoOverlay.classList.remove('active');
-      if (catVideoIframe) catVideoIframe.src = '';
+      if (unmuteCatBtn) unmuteCatBtn.style.display = 'none';
+      try { sessionStorage.removeItem('active_penalty'); } catch (e) {}
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+      }
 
       if (window.gameAudio) window.gameAudio.playSuccessSound();
       socket.emit('cat_video_hint_completed', { stationId });
@@ -1464,8 +1610,17 @@ function triggerCatVideo(seconds = 60, stationId, hint = '') {
   }, 1000);
 }
 
-// הפעלת שיר מני ממטרה לחשיפת פתרון מלא (לפחות 60 שניות מלאות)
+// הפעלת שיר פתיחה מני ממטרה לחשיפת פתרון מלא מקומי (60 שניות מלאות החל מ-2:05 דקות)
 function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
+  try {
+    sessionStorage.setItem('active_penalty', JSON.stringify({
+      type: 'solution',
+      stationId,
+      solution,
+      durationSeconds: seconds
+    }));
+  } catch (e) {}
+
   if (meniMamtaraTimerInterval) {
     clearInterval(meniMamtaraTimerInterval);
     meniMamtaraTimerInterval = null;
@@ -1474,9 +1629,25 @@ function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
   if (!meniMamtaraOverlay) return;
   meniMamtaraOverlay.classList.add('active');
 
-  if (meniMamtaraIframe) {
-    // שיר מני ממטרה הרשמי פעיל וזמין להטמעה: ממטרה עם מטרה (qSsMW5p6DW8)
-    meniMamtaraIframe.src = 'https://www.youtube.com/embed/qSsMW5p6DW8?autoplay=1&mute=0&controls=0&playsinline=1&loop=1&playlist=qSsMW5p6DW8';
+  const START_TIME = 125; // מתחיל ב-2:05 דקות (125 שניות)
+  const video = document.getElementById('meniMamtaraPlayer');
+  if (video) {
+    const applyStartTime = () => {
+      try {
+        video.currentTime = START_TIME;
+      } catch (e) {
+        console.warn("Error setting currentTime:", e);
+      }
+    };
+
+    if (video.readyState >= 1) {
+      applyStartTime();
+    } else {
+      video.addEventListener('loadedmetadata', applyStartTime, { once: true });
+    }
+    applyStartTime();
+
+    setupVideoAudioUnmute(video, unmuteMeniBtn, meniMamtaraOverlay);
   }
 
   let timeLeft = seconds;
@@ -1493,7 +1664,12 @@ function triggerMeniMamtara(seconds = 60, stationId, solution = '') {
       clearInterval(meniMamtaraTimerInterval);
       meniMamtaraTimerInterval = null;
       meniMamtaraOverlay.classList.remove('active');
-      if (meniMamtaraIframe) meniMamtaraIframe.src = '';
+      if (unmuteMeniBtn) unmuteMeniBtn.style.display = 'none';
+      try { sessionStorage.removeItem('active_penalty'); } catch (e) {}
+      if (video) {
+        video.pause();
+        video.currentTime = START_TIME;
+      }
 
       if (window.gameAudio) window.gameAudio.playSuccessSound();
       socket.emit('meni_mamtara_solution_completed', { stationId });

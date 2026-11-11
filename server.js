@@ -15,6 +15,22 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_CODE = '281005';
 const CONFIG_FILE = path.join(__dirname, 'data', 'stations_config.json');
 
+// מאגר סרטוני חתולים שונים לכל רמז
+const CAT_VIDEOS = [
+  '/videos/cat_1.mp4',
+  '/videos/cat_2.mp4',
+  '/videos/cat_3.mp4',
+  '/videos/cat_4.mp4',
+  '/videos/cat_5.mp4'
+];
+
+function getCatVideoForHint(stationId, hintIndex) {
+  const sNum = parseInt(stationId) || 1;
+  const hNum = parseInt(hintIndex) || 1;
+  const idx = Math.abs((sNum * 3 + hNum - 1)) % CAT_VIDEOS.length;
+  return CAT_VIDEOS[idx];
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
@@ -51,6 +67,9 @@ function loadStationConfigs() {
               if (st.hint) st.hints = [st.hint];
               else st.hints = [];
             }
+            if (cfg.allowSolutionReveal !== undefined) {
+              st.allowSolutionReveal = cfg.allowSolutionReveal;
+            }
           }
         });
       }
@@ -75,7 +94,8 @@ function saveStationConfigs() {
         question: s.question || '',
         answer: s.answer || '',
         hint: (hintsArr && hintsArr[0]) || s.hint || '',
-        hints: hintsArr
+        hints: hintsArr,
+        allowSolutionReveal: s.allowSolutionReveal !== false
       };
     });
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(dataToSave, null, 2), 'utf8');
@@ -84,11 +104,15 @@ function saveStationConfigs() {
   }
 }
 
-// פונקציית עדכון תחנה גלובלית (שם, מספר, מיקום, שאלה, תשובה, רמזים)
-function applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints }) {
+// פונקציית עדכון תחנה גלובלית (שם, מספר, מיקום, שאלה, תשובה, רמזים, אפשרות חשיפת פתרון)
+function applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints, allowSolutionReveal }) {
   const sId = parseInt(stationId);
   const st = STATIONS.find(s => s.id === sId);
   if (!st) return null;
+
+  if (allowSolutionReveal !== undefined) {
+    st.allowSolutionReveal = (allowSolutionReveal === true || allowSolutionReveal === 'true');
+  }
 
   if (name !== undefined && String(name).trim() !== '') {
     st.name = String(name).trim();
@@ -134,7 +158,7 @@ function applyStationUpdate({ stationId, newId, name, location, question, answer
 }
 
 // הוספת תחנה חדשה למשחק
-function addStation({ id, name, location, question, answer, hint, hints }) {
+function addStation({ id, name, location, question, answer, hint, hints, allowSolutionReveal }) {
   const finalStation = STATIONS.find(s => s.type === 'admin_custom_final' || s.id === 17);
   const normalStations = STATIONS.filter(s => s !== finalStation);
 
@@ -151,7 +175,8 @@ function addStation({ id, name, location, question, answer, hint, hints }) {
     solution: answer || '1',
     validAnswers: answer ? [answer] : ['1'],
     hint: hintsArr[0] || '',
-    hints: hintsArr
+    hints: hintsArr,
+    allowSolutionReveal: allowSolutionReveal !== false
   };
 
   normalStations.push(newStation);
@@ -224,24 +249,33 @@ loadStationConfigs();
 let systemConfig = {
   strictMode: true,
   minRequiredAnswers: 5,
-  numTeams: 10
+  numTeams: 10,
+  staggerRoutes: false
 };
 
 const teams = {};
 
-// סידור תחנות לקבוצה: רוטציה מעגלית של כל תחנות הביניים, ותחנת הסיום תמיד אחרונה בהכרח אצל כולן!
+// סידור תחנות לקבוצה: כברירת מחדל מסלול ליניארי מוסדר (1 עד הסוף לכולן), עם אפשרות לפיזור מעגלי
 function generateStationOrderForTeam(teamIndex) {
   const total = STATIONS.length;
   if (total <= 1) return [0];
 
   const intermediateCount = total - 1; // כל התחנות למעט התחנה הסופית
   const regularStationIndices = Array.from({ length: intermediateCount }, (_, i) => i);
+
+  if (!systemConfig.staggerRoutes) {
+    // כל הקבוצות מתחילות מתחנה 1 ועוברות את כל התחנות לפי הסדר עד תחנת הסיום!
+    regularStationIndices.push(total - 1);
+    return regularStationIndices;
+  }
+
+  // מצב פיזור: רוטציה מעגלית של תחנות הביניים, תחנת הסיום תמיד אחרונה
   const startOffset = (teamIndex * 2 + 1) % intermediateCount;
   const reordered = [];
   for (let i = 0; i < intermediateCount; i++) {
     reordered.push(regularStationIndices[(startOffset + i) % intermediateCount]);
   }
-  reordered.push(total - 1); // תחנת הסיום תמיד אחרונה בהכרח!
+  reordered.push(total - 1);
   return reordered;
 }
 
@@ -301,6 +335,8 @@ function checkAndUnlockIngredients(team) {
 // קידום קבוצה לתחנה הבאה
 function advanceTeamToNextStation(team, currentStation) {
   const tId = team.id;
+  team.activeHintPenalty = null;
+  team.activeSolutionPenalty = null;
   if (!team.completedStations.includes(currentStation.id)) {
     team.completedStations.push(currentStation.id);
   }
@@ -477,34 +513,27 @@ io.on('connection', (socket) => {
     if (votesCount >= needed) {
       const nextHintIndex = unlockedCount;
       const nextHintText = stHints[nextHintIndex] || '';
+      const chosenCatVideo = getCatVideoForHint(sId, nextHintIndex + 1);
 
-      // שיגור צפייה בסרטון חתולים של 60 שניות לכל הקבוצה כמחיר על חשיפת הרמז
+      // רישום עונש רמז פעיל (כדי שאם מרפרשים - זה יתחיל מחדש מהתחלה!)
+      team.activeHintPenalty = {
+        stationId: sId,
+        hintIndex: nextHintIndex + 1,
+        totalHints: stHints.length,
+        hint: nextHintText,
+        durationSeconds: 60,
+        videoUrl: chosenCatVideo
+      };
+
+      // שיגור צפייה בסרטון חתולים ייחודי של 60 שניות לכל הקבוצה כמחיר על חשיפת הרמז
       io.to(`team_${currentTeamId}`).emit('cat_video_hint_start', {
         stationId: sId,
         hintIndex: nextHintIndex + 1,
         totalHints: stHints.length,
         hint: nextHintText,
-        durationSeconds: 60
+        durationSeconds: 60,
+        videoUrl: chosenCatVideo
       });
-
-      // פתיחה אוטומטית כגיבוי לאחר 60 שניות
-      setTimeout(() => {
-        const curCount = typeof team.unlockedHints[sId] === 'number' ? team.unlockedHints[sId] : (team.unlockedHints[sId] ? 1 : 0);
-        if (curCount <= unlockedCount) {
-          team.unlockedHints[sId] = unlockedCount + 1;
-          team.hintVotes[sId] = [];
-          io.to(`team_${currentTeamId}`).emit('hint_unlocked', {
-            stationId: sId,
-            hintIndex: unlockedCount + 1,
-            totalHints: stHints.length,
-            hint: nextHintText,
-            unlockedHintsCount: unlockedCount + 1,
-            unlockedHintsList: stHints.slice(0, unlockedCount + 1)
-          });
-          emitTeamState(currentTeamId);
-          notifyAdmin();
-        }
-      }, 60000);
     } else {
       io.to(`team_${currentTeamId}`).emit('hint_votes_updated', {
         stationId: sId,
@@ -524,6 +553,7 @@ io.on('connection', (socket) => {
     if (!currentTeamId) return;
     const team = teams[currentTeamId];
     if (!team) return;
+    team.activeHintPenalty = null;
     if (!team.unlockedHints) team.unlockedHints = {};
     const sId = parseInt(stationId);
     const st = STATIONS.find(s => s.id === sId);
@@ -559,6 +589,12 @@ io.on('connection', (socket) => {
     if (!team.unlockedHints) team.unlockedHints = {};
 
     const sId = parseInt(stationId);
+    const st = STATIONS.find(s => s.id === sId);
+    if (st && st.allowSolutionReveal === false) {
+      socket.emit('error_message', { message: 'בתחנה זו לא ניתן לחשוף את הפתרון.' });
+      return;
+    }
+
     if (!team.solutionVotes[sId]) {
       team.solutionVotes[sId] = [];
     }
@@ -570,30 +606,23 @@ io.on('connection', (socket) => {
     const votesCount = team.solutionVotes[sId].length;
     const totalMembers = Math.max(1, team.members.length);
     const needed = Math.max(1, Math.ceil(totalMembers / 2));
-    const st = STATIONS.find(s => s.id === sId);
     const solText = st ? (st.answer || st.solution || '') : '';
 
     if (votesCount >= needed) {
       if (!team.unlockedSolutions[sId]) {
+        // רישום עונש פתרון פעיל (כדי שאם מרפרשים - זה יתחיל מחדש מהתחלה!)
+        team.activeSolutionPenalty = {
+          stationId: sId,
+          solution: solText,
+          durationSeconds: 60
+        };
+
         // שיגור צפייה בשיר של מני ממטרה (60 שניות) לכל הקבוצה כמחיר על חשיפת הפתרון
         io.to(`team_${currentTeamId}`).emit('meni_mamtara_solution_start', {
           stationId: sId,
           solution: solText,
           durationSeconds: 60
         });
-
-        // פתיחה אוטומטית כגיבוי לאחר 60 שניות
-        setTimeout(() => {
-          if (!team.unlockedSolutions[sId]) {
-            team.unlockedSolutions[sId] = true;
-            io.to(`team_${currentTeamId}`).emit('solution_unlocked', {
-              stationId: sId,
-              solution: solText
-            });
-            emitTeamState(currentTeamId);
-            notifyAdmin();
-          }
-        }, 60000);
       } else {
         io.to(`team_${currentTeamId}`).emit('solution_unlocked', {
           stationId: sId,
@@ -617,6 +646,7 @@ io.on('connection', (socket) => {
     if (!currentTeamId) return;
     const team = teams[currentTeamId];
     if (!team) return;
+    team.activeSolutionPenalty = null;
     if (!team.unlockedSolutions) team.unlockedSolutions = {};
     const sId = parseInt(stationId);
     const st = STATIONS.find(s => s.id === sId);
@@ -846,17 +876,30 @@ io.on('connection', (socket) => {
       teams[tId].unlockedHints = {};
       teams[tId].solutionVotes = {};
       teams[tId].unlockedSolutions = {};
+      teams[tId].activeHintPenalty = null;
+      teams[tId].activeSolutionPenalty = null;
       teams[tId].sabotageVotes = {};
       teams[tId].sabotagedUntil = null;
       teams[tId].lockoutUntil = null;
       teams[tId].isGameCompleted = false;
+      teams[tId].stationOrder = generateStationOrderForTeam(parseInt(tId) || 1);
       emitTeamState(tId);
       notifyAdmin();
     }
   });
 
-  socket.on('admin_set_config', ({ strictMode, minRequiredAnswers, numTeams }) => {
+  socket.on('admin_set_config', ({ strictMode, minRequiredAnswers, numTeams, staggerRoutes }) => {
     if (typeof strictMode === 'boolean') systemConfig.strictMode = strictMode;
+    if (typeof staggerRoutes === 'boolean') {
+      const changed = (systemConfig.staggerRoutes !== staggerRoutes);
+      systemConfig.staggerRoutes = staggerRoutes;
+      if (changed) {
+        for (const tId of Object.keys(teams)) {
+          teams[tId].stationOrder = generateStationOrderForTeam(parseInt(tId) || 1);
+          emitTeamState(tId);
+        }
+      }
+    }
     if (minRequiredAnswers) systemConfig.minRequiredAnswers = parseInt(minRequiredAnswers);
     if (numTeams && parseInt(numTeams) > 0) {
       systemConfig.numTeams = parseInt(numTeams);
@@ -864,6 +907,9 @@ io.on('connection', (socket) => {
     }
     io.emit('config_updated', systemConfig);
     notifyAdmin();
+    for (const tId of Object.keys(teams)) {
+      emitTeamState(tId);
+    }
   });
 });
 
@@ -940,6 +986,9 @@ function emitTeamState(teamId) {
     solutionVotesCount: solVotesList.length,
     solutionVotesNeeded,
     solutionText,
+    allowSolutionReveal: (currentStation.allowSolutionReveal !== false),
+    activeHintPenalty: team.activeHintPenalty || null,
+    activeSolutionPenalty: team.activeSolutionPenalty || null,
     numTeams: systemConfig.numTeams,
     isGameCompleted: team.isGameCompleted
   });
@@ -971,11 +1020,11 @@ app.get('/api/admin/stations', (req, res) => {
 });
 
 app.post('/api/admin/update-station', (req, res) => {
-  const { code, stationId, newId, name, location, question, answer, hint, hints } = req.body;
+  const { code, stationId, newId, name, location, question, answer, hint, hints, allowSolutionReveal } = req.body;
   if (code !== ADMIN_CODE) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
-  const updated = applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints });
+  const updated = applyStationUpdate({ stationId, newId, name, location, question, answer, hint, hints, allowSolutionReveal });
   if (!updated) {
     return res.status(404).json({ error: 'Station not found' });
   }
@@ -990,11 +1039,11 @@ app.post('/api/admin/update-station', (req, res) => {
 });
 
 app.post('/api/admin/add-station', (req, res) => {
-  const { code, id, name, location, question, answer, hint, hints } = req.body;
+  const { code, id, name, location, question, answer, hint, hints, allowSolutionReveal } = req.body;
   if (code !== ADMIN_CODE) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
-  const newStation = addStation({ id, name, location, question, answer, hint, hints });
+  const newStation = addStation({ id, name, location, question, answer, hint, hints, allowSolutionReveal });
 
   io.emit('stations_config_updated', STATIONS);
   notifyAdmin();

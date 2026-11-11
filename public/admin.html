@@ -278,6 +278,13 @@
               <textarea id="newStationQuestion" class="form-textarea" rows="2" placeholder="טקסט החידה או ההוראה..."></textarea>
             </div>
 
+            <div style="grid-column: 1 / -1; background: rgba(30, 41, 59, 0.5); border: 1px solid #3b82f6; border-radius: 10px; padding: 10px 14px;">
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="newStationAllowSolution" checked style="width: 20px; height: 20px; accent-color: #f59e0b; cursor: pointer;">
+                <span style="color: #fbbf24; font-weight: 800; font-size: 0.95rem;">אפשר לשחקנים לפתוח פתרון מלא בתחנה זו (מחיר: שיר מני ממטרה) 🚿</span>
+              </label>
+            </div>
+
             <div style="grid-column: 1 / -1; background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <label class="form-label" style="color: #fbbf24; font-weight: 800; margin: 0;">
@@ -609,6 +616,21 @@
               <textarea class="form-textarea st-question" rows="2" placeholder="טקסט השאלה או ההוראות...">${st.question || ''}</textarea>
             </div>
 
+            <div style="grid-column: 1 / -1; background: rgba(30, 41, 59, 0.5); border: 1px solid #3b82f6; border-radius: 10px; padding: 12px 14px; margin-top: 4px;">
+              <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; user-select: none;">
+                <input type="checkbox" class="st-allow-solution" ${st.allowSolutionReveal !== false ? 'checked' : ''} style="width: 22px; height: 22px; accent-color: #f59e0b; cursor: pointer; margin-top: 2px;">
+                <div>
+                  <div style="color: #fbbf24; font-weight: 800; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                    <span>🔓 אפשרות חשיפת פתרון בתחנה זו (מחיר: שיר מני ממטרה) 🚿🎶</span>
+                  </div>
+                  <p style="color: #cbd5e1; font-size: 0.8rem; margin: 3px 0 0 0; line-height: 1.4;">
+                    <strong>מסומן (ברירת מחדל):</strong> השחקנים יוכלו להצביע (לפחות 50%) ולצפות בשיר של מני ממטרה של דקה כדי לחשוף את הפתרון.<br>
+                    <strong>לא מסומן:</strong> התחנה חסומה לחשיפת פתרון! לא יופיע לשחקנים כפתור מני ממטרה והם חייבים לפתור בעצמם.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             <div style="grid-column: 1 / -1; background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 10px; padding: 12px; margin-top: 4px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                 <label class="form-label" style="color: #fbbf24; font-weight: 800; margin: 0;">
@@ -691,6 +713,7 @@
       const hintInputs = card.querySelectorAll('.st-hint-item');
       const hints = Array.from(hintInputs).map(i => i.value.trim()).filter(h => h.length > 0);
       const hint = hints[0] || '';
+      const allowSolutionReveal = card.querySelector('.st-allow-solution') ? card.querySelector('.st-allow-solution').checked : true;
 
       fetch('/api/admin/update-station', {
         method: 'POST',
@@ -704,7 +727,8 @@
           question,
           answer,
           hint,
-          hints
+          hints,
+          allowSolutionReveal
         })
       })
       .then(res => res.json())
@@ -824,6 +848,7 @@
         const hintInputs = document.querySelectorAll('#newStationHintsList .new-st-hint-item');
         const hints = Array.from(hintInputs).map(i => i.value.trim()).filter(h => h.length > 0);
         const hint = hints[0] || '';
+        const allowSolutionReveal = document.getElementById('newStationAllowSolution') ? document.getElementById('newStationAllowSolution').checked : true;
 
         if (!name) {
           alert('נא להזין שם לתחנה החדשה!');
@@ -841,7 +866,8 @@
             question,
             answer,
             hint,
-            hints
+            hints,
+            allowSolutionReveal
           })
         })
         .then(res => res.json())
